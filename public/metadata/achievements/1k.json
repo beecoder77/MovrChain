@@ -1,0 +1,20 @@
+{
+  "name": "First Kilometer",
+  "description": "Complete a single verified run of at least 1 km",
+  "image": "/brand/achievements/1k.svg",
+  "external_url": "https://movrchain.app",
+  "attributes": [
+    {
+      "trait_type": "Criterion",
+      "value": "SingleRunMeters"
+    },
+    {
+      "trait_type": "Threshold",
+      "value": 1000
+    },
+    {
+      "trait_type": "Achievement ID",
+      "value": 1
+    }
+  ]
+}

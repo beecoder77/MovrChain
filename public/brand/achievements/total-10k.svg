@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img">
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <!-- outer badge ring -->
+  <circle cx="512" cy="512" r="420" fill="none" stroke="#D83900" stroke-width="28"/>
+  <circle cx="512" cy="512" r="372" fill="none" stroke="#231813" stroke-width="6" opacity="0.18"/>
+  <!-- route arc -->
+  <path d="M220 620c80-190 196-290 292-290s212 100 292 290"
+        fill="none" stroke="#D83900" stroke-width="36" stroke-linecap="round"/>
+  <circle cx="320" cy="470" r="16" fill="#231813"/>
+  <circle cx="512" cy="330" r="20" fill="#D83900"/>
+  <circle cx="704" cy="470" r="16" fill="#231813"/>
+  <!-- milestone numeral -->
+  <text x="512" y="700" text-anchor="middle" font-family="DM Sans, system-ui, sans-serif"
+        font-size="200" font-weight="700" fill="#231813" letter-spacing="-0.03em">10K</text>
+  <text x="512" y="780" text-anchor="middle" font-family="DM Sans, system-ui, sans-serif"
+        font-size="36" font-weight="600" fill="#D83900" letter-spacing="0.12em">TOTAL</text>
+</svg>

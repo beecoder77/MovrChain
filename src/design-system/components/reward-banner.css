@@ -1,0 +1,38 @@
+.ds-reward-banner {
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-ink-on-primary);
+  text-align: center;
+  margin-bottom: var(--space-5);
+  animation: ds-reward-reveal var(--duration-normal) var(--ease-out);
+}
+
+@keyframes ds-reward-reveal {
+  from {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-reward-banner {
+    animation: none;
+  }
+}
+
+.ds-reward-banner__amount {
+  font-size: var(--text-reward);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-brand);
+}
+
+.ds-reward-banner__label {
+  margin-top: var(--space-1);
+  font-size: 0.875rem;
+  opacity: 0.85;
+}

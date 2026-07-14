@@ -1,0 +1,20 @@
+{
+  "name": "Century Club",
+  "description": "Accumulate 100 km across all verified runs",
+  "image": "/brand/achievements/century.svg",
+  "external_url": "https://movrchain.app",
+  "attributes": [
+    {
+      "trait_type": "Criterion",
+      "value": "TotalDistanceMeters"
+    },
+    {
+      "trait_type": "Threshold",
+      "value": 100000
+    },
+    {
+      "trait_type": "Achievement ID",
+      "value": 10
+    }
+  ]
+}

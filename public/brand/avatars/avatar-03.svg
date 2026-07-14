@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Relay male">
+  <rect width="640" height="640" rx="96" fill="#FFFFFF"/>
+  <!-- soft plate -->
+  <circle cx="320" cy="340" r="250" fill="#F7F4F2"/>
+  <path d="M120 520c40-80 120-120 200-120s160 40 200 120v120H120z" fill="#8D5524"/>
+       <path d="M160 500c60-40 140-40 200 0" fill="none" stroke="#231813" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="320" cy="300" r="118" fill="#8D5524"/>
+  <path d="M208 300c0-100 50-145 112-145s112 45 112 145c-25-55-70-80-112-80s-87 25-112 80z" fill="#1A1A1A"/>
+  
+    <circle cx="280" cy="295" r="10" fill="#231813"/>
+    <circle cx="360" cy="295" r="10" fill="#231813"/>
+    <path d="M295 345c15 18 35 18 50 0" fill="none" stroke="#231813" stroke-width="8" stroke-linecap="round"/>
+  
+  <circle cx="320" cy="550" r="18" fill="#D83900"/>
+</svg>

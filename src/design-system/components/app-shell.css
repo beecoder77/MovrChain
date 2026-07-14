@@ -1,0 +1,83 @@
+.ds-app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+}
+
+.ds-app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--color-bg);
+}
+
+.ds-app-header__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ds-app-header--on-primary {
+  background: var(--color-primary);
+  color: var(--color-ink-on-primary);
+}
+
+.ds-app-header--on-primary .ds-brand-mark,
+.ds-app-header--on-primary .ds-step-label {
+  color: var(--color-ink-on-primary);
+}
+
+.ds-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-headline);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-brand);
+  color: var(--color-ink);
+}
+
+.ds-brand-mark--button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.ds-brand-mark--button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.ds-app-header--on-primary .ds-brand-mark--button:focus-visible {
+  outline-color: var(--color-ink-on-primary);
+}
+
+.ds-step-label {
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-step);
+}
+
+.ds-app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-app-main--with-nav {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}

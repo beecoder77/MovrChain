@@ -1,0 +1,24 @@
+.ds-alert {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-sm);
+  text-align: left;
+}
+
+.ds-alert--error {
+  background: var(--color-error-surface);
+  color: var(--color-error);
+}
+
+.ds-alert--warning {
+  background: var(--color-warning-surface);
+  color: var(--color-ink);
+}
+
+.ds-alert--spaced {
+  margin-top: var(--space-4);
+}
+
+.ds-alert--footer-spaced {
+  margin-bottom: var(--space-4);
+}

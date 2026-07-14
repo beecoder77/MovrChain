@@ -1,0 +1,45 @@
+# Dependencies & build
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+contracts/.env
+contracts/.env.*
+!contracts/.env.example
+
+# Foundry artifacts (local / deploy noise)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/metadata/*.uri.txt
+contracts/metadata/uris.env
+
+# Internal design / agent / docs (not for GitHub)
+.impeccable/
+docs/
+PRODUCT.md
+DESIGN.md
+CONTRACT.md
+*.canvas.tsx
+AGENTS.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Logs & coverage
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+.nyc_output/

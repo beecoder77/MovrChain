@@ -1,0 +1,20 @@
+{
+  "name": "30-Day Streak",
+  "description": "Run at least 1 km per day for 30 consecutive days",
+  "image": "/brand/achievements/streak-30.svg",
+  "external_url": "https://movrchain.app",
+  "attributes": [
+    {
+      "trait_type": "Criterion",
+      "value": "StreakDays"
+    },
+    {
+      "trait_type": "Threshold",
+      "value": 30
+    },
+    {
+      "trait_type": "Achievement ID",
+      "value": 8
+    }
+  ]
+}

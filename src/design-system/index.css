@@ -1,0 +1,12 @@
+/**
+ * MovrChain design system — tokens + components.
+ */
+@import "./tokens/index.css";
+@import "./components/button.css";
+@import "./components/stat-hero.css";
+@import "./components/alert.css";
+@import "./components/wallet-chip.css";
+@import "./components/pipeline.css";
+@import "./components/reward-banner.css";
+@import "./components/app-shell.css";
+@import "./components/upload-zone.css";

@@ -1,0 +1,52 @@
+.ds-stat-hero {
+  text-align: center;
+}
+
+.ds-stat-hero__value {
+  font-size: var(--text-display);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.ds-stat-hero__unit {
+  font-size: var(--text-display-unit);
+  font-weight: var(--weight-semibold);
+  margin-left: 0.15em;
+  opacity: 0.85;
+}
+
+.ds-stat-hero__label {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.ds-stat-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-10);
+  margin-top: var(--space-8);
+}
+
+.ds-stat-item__value {
+  font-size: var(--text-stat-secondary);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-snug);
+}
+
+.ds-stat-item__label {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  opacity: 0.7;
+}

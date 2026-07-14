@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Pulse female">
+  <rect width="640" height="640" rx="96" fill="#FFFFFF"/>
+  <!-- soft plate -->
+  <circle cx="320" cy="340" r="250" fill="#F7F4F2"/>
+  <path d="M140 520c36-90 110-140 180-140s144 50 180 140v120H140z" fill="#F3D2B5"/>
+       <path d="M180 490c50-36 130-36 180 0" fill="none" stroke="#231813" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="320" cy="300" r="112" fill="#F3D2B5"/>
+  <path d="M210 300c10-110 70-155 110-155s100 45 110 155c-20-60-70-90-110-90s-90 30-110 90z" fill="#1A1A1A"/>
+       <path d="M400 280c40 20 55 80 45 140" fill="none" stroke="#1A1A1A" stroke-width="36" stroke-linecap="round"/>
+  
+    <circle cx="280" cy="295" r="10" fill="#231813"/>
+    <circle cx="360" cy="295" r="10" fill="#231813"/>
+    <path d="M295 345c15 18 35 18 50 0" fill="none" stroke="#231813" stroke-width="8" stroke-linecap="round"/>
+  
+  <circle cx="320" cy="550" r="18" fill="#D83900"/>
+</svg>

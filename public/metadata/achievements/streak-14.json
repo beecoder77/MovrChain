@@ -1,0 +1,20 @@
+{
+  "name": "14-Day Streak",
+  "description": "Run at least 1 km per day for 14 consecutive days",
+  "image": "/brand/achievements/streak-14.svg",
+  "external_url": "https://movrchain.app",
+  "attributes": [
+    {
+      "trait_type": "Criterion",
+      "value": "StreakDays"
+    },
+    {
+      "trait_type": "Threshold",
+      "value": 14
+    },
+    {
+      "trait_type": "Achievement ID",
+      "value": 7
+    }
+  ]
+}

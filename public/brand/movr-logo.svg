@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="MOVR">
+  <title>MOVR</title>
+  <!-- MovrChain token mark: route-arc + M monogram (Finish Line Pulse) -->
+  <rect width="1024" height="1024" rx="192" fill="#FFFFFF"/>
+  <!-- Route arc (finish-line pulse) -->
+  <path d="M168 640c96-220 232-340 344-340s248 120 344 340"
+        fill="none" stroke="#D83900" stroke-width="56" stroke-linecap="round"/>
+  <!-- Pace dots along the arc -->
+  <circle cx="280" cy="468" r="22" fill="#231813"/>
+  <circle cx="512" cy="300" r="28" fill="#D83900"/>
+  <circle cx="744" cy="468" r="22" fill="#231813"/>
+  <!-- M monogram -->
+  <path d="M296 760V472l152 200 152-200v288"
+        fill="none" stroke="#231813" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

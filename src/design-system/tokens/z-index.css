@@ -1,0 +1,5 @@
+:root {
+  --z-sticky: 10;
+  --z-modal: 40;
+  --z-toast: 50;
+}

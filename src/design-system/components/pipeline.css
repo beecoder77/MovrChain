@@ -1,0 +1,40 @@
+.ds-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  list-style: none;
+  margin: var(--space-6) 0 0;
+  padding: 0;
+}
+
+.ds-pipeline__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-body-sm);
+}
+
+.ds-pipeline__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  flex-shrink: 0;
+}
+
+.ds-pipeline__step--done .ds-pipeline__dot {
+  background: var(--color-success);
+}
+
+.ds-pipeline__step--active .ds-pipeline__dot {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-ring);
+}
+
+.ds-pipeline__step--pending {
+  color: var(--color-text-muted);
+}
+
+.ds-pipeline__label {
+  min-width: 0;
+}

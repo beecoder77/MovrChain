@@ -1,0 +1,29 @@
+:root {
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+
+  --text-display: clamp(3.5rem, 18vw, 5.5rem);
+  --text-display-unit: clamp(1.25rem, 5vw, 1.75rem);
+  --text-reward: 2.5rem;
+  --text-stat-secondary: 1.75rem;
+  --text-headline: 1.25rem;
+  --text-body: 1rem;
+  --text-body-sm: 0.9375rem;
+  --text-label: 0.8125rem;
+  --text-caption: 0.75rem;
+  --text-hash: 0.75rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1;
+  --leading-snug: 1.1;
+  --leading-normal: 1.5;
+
+  --tracking-display: -0.03em;
+  --tracking-brand: -0.02em;
+  --tracking-label: 0.08em;
+  --tracking-step: 0.06em;
+}

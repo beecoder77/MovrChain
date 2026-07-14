@@ -1,0 +1,20 @@
+{
+  "name": "First Marathon",
+  "description": "Complete a single verified run of at least 42.195 km",
+  "image": "/brand/achievements/marathon.svg",
+  "external_url": "https://movrchain.app",
+  "attributes": [
+    {
+      "trait_type": "Criterion",
+      "value": "SingleRunMeters"
+    },
+    {
+      "trait_type": "Threshold",
+      "value": 42195
+    },
+    {
+      "trait_type": "Achievement ID",
+      "value": 5
+    }
+  ]
+}

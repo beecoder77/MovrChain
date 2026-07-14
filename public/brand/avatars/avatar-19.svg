@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-label="Steady female">
+  <rect width="640" height="640" rx="96" fill="#FFFFFF"/>
+  <!-- soft plate -->
+  <circle cx="320" cy="340" r="250" fill="#F7F4F2"/>
+  <path d="M140 520c36-90 110-140 180-140s144 50 180 140v120H140z" fill="#F6C8A0"/>
+       <path d="M180 490c50-36 130-36 180 0" fill="none" stroke="#231813" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="320" cy="300" r="112" fill="#F6C8A0"/>
+  <path d="M210 300c10-100 70-145 110-145s100 45 110 145H210z" fill="#1A1A1A"/>
+       <path d="M210 255h220" stroke="#D83900" stroke-width="16" stroke-linecap="round"/>
+  
+    <circle cx="280" cy="295" r="10" fill="#231813"/>
+    <circle cx="360" cy="295" r="10" fill="#231813"/>
+    <path d="M295 345c15 18 35 18 50 0" fill="none" stroke="#231813" stroke-width="8" stroke-linecap="round"/>
+  
+  <circle cx="320" cy="550" r="18" fill="#D83900"/>
+</svg>

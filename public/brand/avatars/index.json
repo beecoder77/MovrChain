@@ -1,0 +1,145 @@
+{
+  "avatars": [
+    {
+      "id": 0,
+      "gender": "male",
+      "label": "Stride",
+      "sport": "road",
+      "src": "/brand/avatars/avatar-00.svg"
+    },
+    {
+      "id": 1,
+      "gender": "male",
+      "label": "Tempo",
+      "sport": "track",
+      "src": "/brand/avatars/avatar-01.svg"
+    },
+    {
+      "id": 2,
+      "gender": "male",
+      "label": "Trail",
+      "sport": "trail",
+      "src": "/brand/avatars/avatar-02.svg"
+    },
+    {
+      "id": 3,
+      "gender": "male",
+      "label": "Relay",
+      "sport": "relay",
+      "src": "/brand/avatars/avatar-03.svg"
+    },
+    {
+      "id": 4,
+      "gender": "male",
+      "label": "Dawn",
+      "sport": "sunrise",
+      "src": "/brand/avatars/avatar-04.svg"
+    },
+    {
+      "id": 5,
+      "gender": "male",
+      "label": "Pulse",
+      "sport": "interval",
+      "src": "/brand/avatars/avatar-05.svg"
+    },
+    {
+      "id": 6,
+      "gender": "male",
+      "label": "Hill",
+      "sport": "climb",
+      "src": "/brand/avatars/avatar-06.svg"
+    },
+    {
+      "id": 7,
+      "gender": "male",
+      "label": "Pack",
+      "sport": "crew",
+      "src": "/brand/avatars/avatar-07.svg"
+    },
+    {
+      "id": 8,
+      "gender": "male",
+      "label": "Finish",
+      "sport": "race",
+      "src": "/brand/avatars/avatar-08.svg"
+    },
+    {
+      "id": 9,
+      "gender": "male",
+      "label": "Steady",
+      "sport": "easy",
+      "src": "/brand/avatars/avatar-09.svg"
+    },
+    {
+      "id": 10,
+      "gender": "female",
+      "label": "Stride",
+      "sport": "road",
+      "src": "/brand/avatars/avatar-10.svg"
+    },
+    {
+      "id": 11,
+      "gender": "female",
+      "label": "Tempo",
+      "sport": "track",
+      "src": "/brand/avatars/avatar-11.svg"
+    },
+    {
+      "id": 12,
+      "gender": "female",
+      "label": "Trail",
+      "sport": "trail",
+      "src": "/brand/avatars/avatar-12.svg"
+    },
+    {
+      "id": 13,
+      "gender": "female",
+      "label": "Relay",
+      "sport": "relay",
+      "src": "/brand/avatars/avatar-13.svg"
+    },
+    {
+      "id": 14,
+      "gender": "female",
+      "label": "Dawn",
+      "sport": "sunrise",
+      "src": "/brand/avatars/avatar-14.svg"
+    },
+    {
+      "id": 15,
+      "gender": "female",
+      "label": "Pulse",
+      "sport": "interval",
+      "src": "/brand/avatars/avatar-15.svg"
+    },
+    {
+      "id": 16,
+      "gender": "female",
+      "label": "Hill",
+      "sport": "climb",
+      "src": "/brand/avatars/avatar-16.svg"
+    },
+    {
+      "id": 17,
+      "gender": "female",
+      "label": "Pack",
+      "sport": "crew",
+      "src": "/brand/avatars/avatar-17.svg"
+    },
+    {
+      "id": 18,
+      "gender": "female",
+      "label": "Finish",
+      "sport": "race",
+      "src": "/brand/avatars/avatar-18.svg"
+    },
+    {
+      "id": 19,
+      "gender": "female",
+      "label": "Steady",
+      "sport": "easy",
+      "src": "/brand/avatars/avatar-19.svg"
+    }
+  ],
+  "count": 20
+}

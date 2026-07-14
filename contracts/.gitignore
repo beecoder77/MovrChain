@@ -1,0 +1,18 @@
+# Compiler files
+cache/
+out/
+
+# Broadcast logs (contain deployer txs — keep local)
+broadcast/
+
+# Docs
+docs/
+
+# Dotenv
+.env
+.env.*
+!.env.example
+
+# Generated on-chain metadata blobs
+metadata/*.uri.txt
+metadata/uris.env

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="MovrChain Demo"
+  xmlns="http://www.topografix.com/2001/gpx">
+  <metadata>
+    <name>Morning Loop</name>
+    <time>2026-07-14T06:30:00Z</time>
+  </metadata>
+  <trk>
+    <name>Morning Loop</name>
+    <trkseg>
+      <trkpt lat="-6.200000" lon="106.816666"><ele>15</ele><time>2026-07-14T06:30:00Z</time></trkpt>
+      <trkpt lat="-6.200500" lon="106.817200"><ele>16</ele><time>2026-07-14T06:31:30Z</time></trkpt>
+      <trkpt lat="-6.201000" lon="106.817800"><ele>17</ele><time>2026-07-14T06:33:00Z</time></trkpt>
+      <trkpt lat="-6.201800" lon="106.818500"><ele>18</ele><time>2026-07-14T06:34:30Z</time></trkpt>
+      <trkpt lat="-6.202500" lon="106.819200"><ele>19</ele><time>2026-07-14T06:36:00Z</time></trkpt>
+      <trkpt lat="-6.203200" lon="106.820000"><ele>20</ele><time>2026-07-14T06:37:30Z</time></trkpt>
+      <trkpt lat="-6.204000" lon="106.820800"><ele>21</ele><time>2026-07-14T06:39:00Z</time></trkpt>
+      <trkpt lat="-6.204800" lon="106.821600"><ele>22</ele><time>2026-07-14T06:40:30Z</time></trkpt>
+      <trkpt lat="-6.205500" lon="106.822400"><ele>23</ele><time>2026-07-14T06:42:00Z</time></trkpt>
+      <trkpt lat="-6.206200" lon="106.823200"><ele>24</ele><time>2026-07-14T06:43:30Z</time></trkpt>
+      <trkpt lat="-6.207000" lon="106.824000"><ele>25</ele><time>2026-07-14T06:45:00Z</time></trkpt>
+      <trkpt lat="-6.207800" lon="106.824800"><ele>26</ele><time>2026-07-14T06:46:30Z</time></trkpt>
+      <trkpt lat="-6.208500" lon="106.825500"><ele>27</ele><time>2026-07-14T06:48:00Z</time></trkpt>
+      <trkpt lat="-6.209200" lon="106.826200"><ele>28</ele><time>2026-07-14T06:49:30Z</time></trkpt>
+      <trkpt lat="-6.210000" lon="106.827000"><ele>29</ele><time>2026-07-14T06:51:00Z</time></trkpt>
+      <trkpt lat="-6.210800" lon="106.827800"><ele>30</ele><time>2026-07-14T06:52:30Z</time></trkpt>
+      <trkpt lat="-6.211500" lon="106.828500"><ele>31</ele><time>2026-07-14T06:54:00Z</time></trkpt>
+      <trkpt lat="-6.212200" lon="106.829200"><ele>32</ele><time>2026-07-14T06:55:30Z</time></trkpt>
+      <trkpt lat="-6.213000" lon="106.830000"><ele>33</ele><time>2026-07-14T06:57:00Z</time></trkpt>
+      <trkpt lat="-6.213800" lon="106.830800"><ele>34</ele><time>2026-07-14T06:58:30Z</time></trkpt>
+      <trkpt lat="-6.214500" lon="106.831500"><ele>35</ele><time>2026-07-14T07:00:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
