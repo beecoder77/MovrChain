@@ -22,6 +22,7 @@ import {
 } from "../lib/achievements";
 import { formatWalletError } from "../lib/errors";
 import { formatAddress } from "../lib/posts";
+import { EXPLORER_URL } from "../lib/wagmi";
 import { Alert, Button } from "../design-system/components";
 import {
   usePublicClient,
@@ -744,6 +745,20 @@ export function ClubDetailScreen({
         </div>
       </div>
 
+      {treasury && (
+        <p className="club-detail__treasury-wallet">
+          Treasury wallet{" "}
+          <a
+            className="club-detail__treasury-link"
+            href={`${EXPLORER_URL}/address/${treasury}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {formatAddress(treasury)}
+          </a>
+        </p>
+      )}
+
       <section className="club-detail__panel" aria-labelledby="donate-h">
         <h2 id="donate-h" className="club-detail__panel-title">
           Donations
@@ -774,13 +789,18 @@ export function ClubDetailScreen({
                 disabled={busy}
                 onClick={handleApproveDonate}
               >
-                Donate to treasury
+                1 · Approve MOVR
               </Button>
             ) : (
               <Button block loading={busy} disabled={busy} onClick={handleDonate}>
-                Donate to treasury
+                2 · Donate to treasury
               </Button>
             )}
+            <p className="club-detail__hint">
+              {needsDonateApprove
+                ? "Approve lets the treasury pull MOVR — confirm again to actually donate."
+                : "Approved — tap Donate to move MOVR into the club treasury."}
+            </p>
           </div>
         )}
 

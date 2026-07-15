@@ -1510,6 +1510,25 @@ button {
   gap: var(--space-3);
 }
 
+.club-detail__treasury-wallet {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.club-detail__treasury-link {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.club-detail__treasury-link:hover {
+  color: var(--color-ink);
+}
+
 .club-detail__stat {
   display: flex;
   flex-direction: column;
