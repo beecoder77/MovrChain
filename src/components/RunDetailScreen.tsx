@@ -6,6 +6,7 @@ import {
   formatTimeAgo,
 } from "../lib/posts";
 import { rewardLabelForDistance } from "../lib/chain";
+import { clubRewardLabelFromWei, useRunClaimRewards } from "../lib/runRewards";
 import { EXPLORER_URL } from "../lib/wagmi";
 import { getRoutePoints, toMapPoints } from "../lib/routes";
 import { downsamplePoints, type ParsedRun } from "../lib/gpx";
@@ -30,6 +31,11 @@ export function RunDetailScreen({
   onOpenProfile,
 }: RunDetailScreenProps) {
   const { profile } = useRunnerProfile(post.address as `0x${string}`);
+  const { clubRewardWei } = useRunClaimRewards(
+    post.runHash,
+    post.milestoneMet,
+  );
+  const clubRewardLabel = clubRewardLabelFromWei(clubRewardWei);
   const stored = getRoutePoints(post.runHash);
   const mapPoints = liveRun
     ? downsamplePoints(liveRun.points, 200)
@@ -124,10 +130,23 @@ export function RunDetailScreen({
           <dd>{formatDuration(post.durationSeconds)}</dd>
         </div>
         {post.milestoneMet && (
-          <div className="summary-meta-row">
-            <dt>MOVR reward</dt>
-            <dd>{rewardLabelForDistance(post.distanceMeters)}</dd>
-          </div>
+          <>
+            <div className="summary-meta-row">
+              <dt>MOVR reward</dt>
+              <dd>{rewardLabelForDistance(post.distanceMeters)}</dd>
+            </div>
+            {clubRewardWei > 0n && (
+              <div className="summary-meta-row">
+                <dt>Club treasury</dt>
+                <dd>
+                  {clubRewardLabel}{" "}
+                  <span className="detail-screen__reward-note">
+                    (1 MOVR / 10 km)
+                  </span>
+                </dd>
+              </div>
+            )}
+          </>
         )}
         <div className="summary-meta-row">
           <dt>Run hash</dt>

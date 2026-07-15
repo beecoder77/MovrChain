@@ -28,12 +28,25 @@ export const ACHIEVEMENT_NFT_ADDRESS =
 
 export const STAKING_ADDRESS =
   env("VITE_STAKING") ??
-  ("0xD033D62f52C851369FFdDbDd7eD0Fcf41630821b" as const);
+  ("0xc1911b9813Cb8f88d4825caf331d65688CaDA71D" as const);
 
-/** MovrMilestoneReward — claim MOVR for ≥1 km attested runs (1 MOVR/km) */
+/** MovrClubRegistry — clubs ≤10 + treasury factory */
+export const CLUB_REGISTRY_ADDRESS =
+  env("VITE_CLUB_REGISTRY") ??
+  ("0x5e2D82228217228403C54bbf86CeCC85fb59C5Ed" as const);
+
+export const CLUB_MEMBER_NFT_ADDRESS =
+  env("VITE_CLUB_MEMBER_NFT") ??
+  ("0xd29eB860159CC8D72de571e2CaA1273E761a0039" as const);
+
+export const CLUB_BADGE_NFT_ADDRESS =
+  env("VITE_CLUB_BADGE_NFT") ??
+  ("0x53ec0DB5b27666369D356712239309066Ff425F5" as const);
+
+/** MovrMilestoneReward — 1 MOVR/km to runner; +1 MOVR/10km to club treasury if member */
 export const MILESTONE_REWARD_ADDRESS =
   env("VITE_MILESTONE_REWARD") ??
-  ("0xDfF2d87173eD482B62357C3d4b91d35d62f8869A" as const);
+  ("0x430E40a4Bae2aBa14937DCcE1BF04fd3F309e716" as const);
 
 /** MovrFeed — community + per-wallet run timeline */
 export const FEED_ADDRESS =

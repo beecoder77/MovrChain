@@ -1,5 +1,7 @@
 :root {
   --z-sticky: 10;
-  --z-modal: 40;
-  --z-toast: 50;
+  /* Leaflet panes/controls reach ~1000 — nav must sit above maps */
+  --z-nav: 1100;
+  --z-modal: 1200;
+  --z-toast: 1300;
 }

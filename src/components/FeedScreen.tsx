@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { RunPost } from "../lib/posts";
+import { usePostsClubRewards } from "../lib/runRewards";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
 import { TimelinePost } from "./TimelinePost";
 import { Button } from "../design-system/components";
@@ -20,10 +21,12 @@ function CommunityPost({
   post,
   onOpen,
   onOpenProfile,
+  clubRewardWei,
 }: {
   post: RunPost;
   onOpen: (post: RunPost) => void;
   onOpenProfile: (address: `0x${string}`) => void;
+  clubRewardWei: bigint;
 }) {
   const { profile } = useRunnerProfile(post.address as `0x${string}`);
   return (
@@ -32,6 +35,7 @@ function CommunityPost({
       profile={profile}
       onOpen={onOpen}
       onOpenProfile={onOpenProfile}
+      clubRewardWei={clubRewardWei}
     />
   );
 }
@@ -49,6 +53,7 @@ export function FeedScreen({
   const { profile: ownProfile } = useRunnerProfile(address);
 
   const list = tab === "yours" ? yourPosts : communityPosts;
+  const { getClubRewardWei } = usePostsClubRewards(list);
   const empty =
     !loading && list.length === 0
       ? tab === "yours"
@@ -138,6 +143,7 @@ export function FeedScreen({
                       profile={ownProfile}
                       onOpen={onOpenPost}
                       onOpenProfile={onOpenProfile}
+                      clubRewardWei={getClubRewardWei(post.runHash)}
                     />
                   </li>
                 ))
@@ -147,6 +153,7 @@ export function FeedScreen({
                       post={post}
                       onOpen={onOpenPost}
                       onOpenProfile={onOpenProfile}
+                      clubRewardWei={getClubRewardWei(post.runHash)}
                     />
                   </li>
                 ))}

@@ -5,6 +5,7 @@ import { formatDistance } from "../lib/gpx";
 import {
   computeRunHash,
   CONTRACT_ADDRESS,
+  clubRewardLabelForDistance,
   meetsMilestone,
   MILESTONE_METERS,
   MILESTONE_REWARD_ABI,
@@ -13,6 +14,7 @@ import {
   rewardLabelForDistance,
 } from "../lib/chain";
 import { FEED_ABI, FEED_CONTRACT_ADDRESS, publishRunName } from "../lib/feed";
+import { CLUB_REGISTRY, CLUB_REGISTRY_ABI } from "../lib/clubs";
 import { downsamplePoints } from "../lib/gpx";
 import { saveRouteFromRun } from "../lib/routes";
 import { RouteMap } from "./RouteMap";
@@ -52,7 +54,7 @@ type PipelineStepId = "parsed" | "attested" | "published" | "reward";
 const GAS_BUFFER_BPS = 200n; // 2.00× estimate
 const ATTEST_GAS_FLOOR = 350_000n;
 const PUBLISH_GAS_FLOOR = 800_000n;
-const CLAIM_GAS_FLOOR = 400_000n;
+const CLAIM_GAS_FLOOR = 550_000n;
 
 function bufferedGas(estimate: bigint, floor: bigint): bigint {
   const bumped = (estimate * GAS_BUFFER_BPS) / 100n;
@@ -64,9 +66,22 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
   const runName = publishRunName(run.name);
   const milestone = meetsMilestone(run.totalDistanceMeters);
   const rewardLabel = rewardLabelForDistance(run.totalDistanceMeters);
+  const clubRewardLabel = clubRewardLabelForDistance(run.totalDistanceMeters);
   const mapPoints = downsamplePoints(run.points, 200);
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: monadTestnet.id });
+  const clubsLive = CLUB_REGISTRY !== zeroAddress;
+
+  const { data: clubIdRaw } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "clubOf",
+    args: address ? [address] : undefined,
+    chainId: monadTestnet.id,
+    query: { enabled: clubsLive && Boolean(address), staleTime: 12_000 },
+  });
+  const myClubId = (clubIdRaw as bigint | undefined) ?? 0n;
+  const inClub = myClubId > 0n;
 
   // Keep map available for feed detail after attest
   useEffect(() => {
@@ -491,7 +506,9 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
     {
       id: "reward",
       label: milestone
-        ? `Claim ${rewardLabel.replace("+", "")} (1 MOVR/km)`
+        ? inClub
+          ? `Claim ${rewardLabel.replace("+", "")} + ${clubRewardLabel.replace("+", "")} to club`
+          : `Claim ${rewardLabel.replace("+", "")} (1 MOVR/km)`
         : "Done",
     },
   ];
@@ -548,14 +565,26 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
       </div>
 
       {published && milestone && (
-        <RewardBanner
-          amount={rewardLabel}
-          label={
-            movrClaimed
-              ? "1 MOVR per km — claimed"
-              : "1 MOVR per km — claiming…"
-          }
-        />
+        <>
+          <RewardBanner
+            amount={rewardLabel}
+            label={
+              movrClaimed
+                ? "1 MOVR per km — claimed"
+                : "1 MOVR per km — claiming…"
+            }
+          />
+          {inClub && (
+            <RewardBanner
+              amount={clubRewardLabel}
+              label={
+                movrClaimed
+                  ? "1 MOVR / 10 km to club treasury — credited toward top-donor vote power"
+                  : "1 MOVR / 10 km to your club treasury (additive)"
+              }
+            />
+          )}
+        </>
       )}
 
       {published && !milestone && (

@@ -148,6 +148,20 @@ export const STAKING_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
+  {
+    type: "function",
+    name: "donateBps",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint16" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setDonateBps",
+    inputs: [{ name: "bps", type: "uint16" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 export type RunnerStats = {
@@ -188,15 +202,22 @@ export function parseRunnerStats(data: unknown): RunnerStats {
   };
 }
 
+export function isClubAchievement(def: AchievementDef): boolean {
+  return def.clubBadgeId !== undefined;
+}
+
 export function progressForAchievement(
   def: AchievementDef,
   stats: RunnerStats,
+  clubProgress?: number,
 ): { current: number; threshold: number; ratio: number } {
   let current = 0;
   if (def.criterion === "single_run_meters") current = stats.bestSingleRunMeters;
   else if (def.criterion === "total_distance_meters")
     current = stats.totalDistanceMeters;
-  else current = Math.max(stats.currentStreakDays, stats.longestStreakDays);
+  else if (def.criterion === "streak_days")
+    current = Math.max(stats.currentStreakDays, stats.longestStreakDays);
+  else current = clubProgress ?? 0;
 
   const threshold = def.threshold;
   const ratio = threshold > 0 ? Math.min(1, current / threshold) : 0;
@@ -208,6 +229,15 @@ export function formatProgressValue(
   value: number,
 ): string {
   if (def.criterion === "streak_days") return `${Math.floor(value)} days`;
+  if (def.criterion === "club_votes") return `${Math.floor(value)} votes`;
+  if (def.criterion === "club_size") return `${Math.floor(value)} members`;
+  if (
+    def.criterion === "club_join" ||
+    def.criterion === "club_donate" ||
+    def.criterion === "club_pass_proposal"
+  ) {
+    return value >= 1 ? "Done" : "Not yet";
+  }
   return `${(value / 1000).toFixed(value >= 10000 ? 1 : 2)} km`;
 }
 

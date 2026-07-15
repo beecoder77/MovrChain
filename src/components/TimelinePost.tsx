@@ -7,6 +7,7 @@ import {
 } from "../lib/posts";
 import { avatarSrc, displayName, type OnChainProfile } from "../lib/profile";
 import { rewardLabelForDistance } from "../lib/chain";
+import { clubRewardLabelFromWei } from "../lib/runRewards";
 import { getRoutePoints, toMapPoints } from "../lib/routes";
 import { RouteMap } from "./RouteMap";
 
@@ -17,6 +18,8 @@ type TimelinePostProps = {
   onOpen?: (post: RunPost) => void;
   /** Open this runner's public profile (avatar / name). */
   onOpenProfile?: (address: `0x${string}`) => void;
+  /** Club treasury MOVR from claim (0 if none). */
+  clubRewardWei?: bigint;
 };
 
 export function TimelinePost({
@@ -25,6 +28,7 @@ export function TimelinePost({
   profile,
   onOpen,
   onOpenProfile,
+  clubRewardWei = 0n,
 }: TimelinePostProps) {
   let runnerLabel: string;
   if (isOwn) {
@@ -58,6 +62,9 @@ export function TimelinePost({
       </div>
     </>
   );
+
+  const clubRewardLabel = clubRewardLabelFromWei(clubRewardWei);
+  const hasClubReward = clubRewardWei > 0n;
 
   const runBody = (
     <>
@@ -96,9 +103,16 @@ export function TimelinePost({
           {interactive ? "Tap for route detail" : "On-chain attestation"}
         </span>
         {post.milestoneMet && (
-          <span className="timeline-post__reward">
-            {rewardLabelForDistance(post.distanceMeters)}
-          </span>
+          <div className="timeline-post__rewards">
+            <span className="timeline-post__reward">
+              {rewardLabelForDistance(post.distanceMeters)}
+            </span>
+            {hasClubReward && (
+              <span className="timeline-post__reward timeline-post__reward--club">
+                {clubRewardLabel} club
+              </span>
+            )}
+          </div>
         )}
       </footer>
     </>

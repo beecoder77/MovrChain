@@ -63,6 +63,8 @@ button {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-map-underlay);
+  isolation: isolate;
+  z-index: 0;
 }
 
 .replay-map-wrap > div {
@@ -176,6 +178,8 @@ button {
   margin: var(--space-4);
   border-radius: var(--radius-md);
   overflow: hidden;
+  isolation: isolate;
+  z-index: 0;
 }
 
 .summary-map > div {
@@ -242,6 +246,8 @@ button {
   overflow: hidden;
   flex-shrink: 0;
   background: var(--color-surface);
+  isolation: isolate;
+  z-index: 0;
 }
 
 .verify-map > div {
@@ -594,6 +600,8 @@ button {
   overflow: hidden;
   background: var(--color-bg);
   pointer-events: none;
+  isolation: isolate;
+  z-index: 0;
 }
 
 .timeline-post__map > div {
@@ -677,6 +685,8 @@ button {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-surface);
+  isolation: isolate;
+  z-index: 0;
 }
 
 .detail-screen__map > div {
@@ -717,6 +727,12 @@ button {
   max-width: 55%;
   text-align: right;
   font-weight: 500;
+}
+
+.detail-screen__reward-note {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-regular);
+  font-size: var(--text-caption);
 }
 
 .timeline-post__header {
@@ -846,10 +862,24 @@ button {
   white-space: nowrap;
 }
 
+.timeline-post__rewards {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
 .timeline-post__reward {
   color: var(--color-primary);
   font-weight: var(--weight-semibold);
   flex-shrink: 0;
+}
+
+.timeline-post__reward--club {
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-caption);
 }
 
 /* Profile */
@@ -1345,6 +1375,290 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Clubs */
+.clubs-screen,
+.club-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-4)
+    calc(var(--space-8) + env(safe-area-inset-bottom));
+}
+
+.clubs-screen__heading,
+.club-detail__title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: var(--weight-bold);
+}
+
+.clubs-screen__sub,
+.club-detail__sub,
+.clubs-screen__hint,
+.club-detail__hint {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.club-detail__vote-status {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+.clubs-screen__empty {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.clubs-screen__empty-title {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+}
+
+.clubs-screen__empty-body {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.clubs-screen__create,
+.club-detail__invite,
+.club-detail__vote-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.clubs-screen__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.clubs-screen__label,
+.club-detail__panel-title {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.clubs-screen__input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font: inherit;
+  color: inherit;
+  min-height: 48px;
+}
+
+.club-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: none;
+  border-radius: var(--radius-md);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.club-card:active {
+  transform: scale(0.99);
+}
+
+.club-card__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.club-card__name {
+  font-weight: var(--weight-semibold);
+}
+
+.club-card__meta,
+.club-card__cta {
+  font-size: var(--text-caption);
+  color: var(--color-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.club-card__meta {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.club-detail__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.club-detail__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.club-detail__stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.club-detail__stat-value {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.club-detail__stat-label {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}
+
+.club-detail__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.club-detail__members {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: var(--text-body-sm);
+  font-family: var(--font-mono);
+}
+
+.club-detail__prop-title {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+}
+
+.club-detail__donate-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+}
+
+.club-detail__donate-you {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-ink);
+}
+
+.club-detail__donate-you strong {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.club-donor-board {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.club-donor-board__row {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font-size: var(--text-body-sm);
+}
+
+.club-donor-board__row--you {
+  outline: 1px solid color-mix(in oklch, var(--color-primary) 45%, transparent);
+}
+
+.club-donor-board__row--top {
+  background: color-mix(in oklch, var(--color-primary) 8%, var(--color-bg));
+}
+
+.club-donor-board__rank {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.club-donor-board__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+}
+
+.club-donor-board__badge {
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklch, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.01em;
+}
+
+.club-donor-board__amt {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.club-donor-board__empty {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.stack-detail__donate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stack-detail__donate-copy {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}
+
+.stack-detail__donate-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stack-detail__donate-unit {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}
+
 /* Bottom nav */
 .bottom-nav {
   position: fixed;
@@ -1353,23 +1667,42 @@ button {
   transform: translateX(-50%);
   width: 100%;
   max-width: var(--app-max-width);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-around;
-  padding: var(--space-2) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+  column-gap: var(--space-2);
+  padding: var(--space-2) var(--space-3)
+    calc(var(--space-3) + env(safe-area-inset-bottom));
   background: var(--color-bg);
   border-top: 1px solid var(--color-border);
-  z-index: var(--z-sticky);
+  z-index: var(--z-nav, 1100);
+}
+
+.bottom-nav__rail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.bottom-nav__rail--start {
+  justify-content: space-evenly;
+}
+
+.bottom-nav__rail--end {
+  justify-content: space-evenly;
 }
 
 .bottom-nav__item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--space-1);
+  flex: 1 1 0;
+  max-width: 88px;
   min-width: var(--tap-target-ghost);
   min-height: var(--tap-target-ghost);
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-1);
   color: var(--color-text-muted);
   font-size: var(--text-caption);
   font-weight: var(--weight-medium);
@@ -1383,6 +1716,8 @@ button {
 .bottom-nav__item:focus-visible {
   color: var(--color-primary);
   border-radius: var(--radius-md);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .bottom-nav__item--active {
@@ -1398,7 +1733,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: calc(var(--space-6) * -1);
+  flex-shrink: 0;
+  margin-top: calc(var(--space-5) * -1);
   transition:
     background var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
@@ -1409,7 +1745,7 @@ button {
 }
 
 .bottom-nav__log:active {
-  transform: scale(0.96);
+  transform: scale(0.98);
 }
 
 .bottom-nav__log:focus-visible {

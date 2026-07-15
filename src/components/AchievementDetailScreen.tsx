@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { zeroAddress } from "viem";
 import {
   useReadContract,
   useWriteContract,
@@ -12,21 +13,26 @@ import {
   claimStatus,
   formatBoostBps,
   formatProgressValue,
+  isClubAchievement,
   NFT_CONTRACT,
   parseRunnerStats,
   progressForAchievement,
 } from "../lib/achievements";
+import {
+  CLAIM_BADGE_GAS,
+  CLUB_BADGE_ABI,
+  CLUB_BADGE_NFT,
+  CLUB_REGISTRY,
+  CLUB_REGISTRY_ABI,
+} from "../lib/clubs";
 import { CONTRACT_ADDRESS, MOVR_CHAIN_ABI } from "../lib/chain";
 import { formatWalletError } from "../lib/errors";
 import { Alert, Button } from "../design-system/components";
 
 type AchievementDetailScreenProps = {
-  /** Subject whose achievement we display (read-only when viewOnly) */
   address: `0x${string}`;
-  /** Connected wallet — claims only when it matches address */
   viewerAddress: `0x${string}`;
   achievement: AchievementDef;
-  /** Force read-only (public profile). Also enforced when viewer ≠ subject. */
   viewOnly?: boolean;
   onBack: () => void;
 };
@@ -39,10 +45,12 @@ export function AchievementDetailScreen({
   onBack,
 }: AchievementDetailScreenProps) {
   const [warning, setWarning] = useState<string | null>(null);
+  const isClub = isClubAchievement(achievement);
+  const badgeId = achievement.clubBadgeId ?? 0;
   const chainId = BigInt(achievement.chainId);
   const canClaim =
-    !viewOnly &&
-    viewerAddress.toLowerCase() === address.toLowerCase();
+    !viewOnly && viewerAddress.toLowerCase() === address.toLowerCase();
+  const badgesLive = CLUB_BADGE_NFT !== zeroAddress;
 
   const { data: statsRaw, refetch: refetchStats } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -50,29 +58,114 @@ export function AchievementDetailScreen({
     functionName: "runnerStats",
     args: [address],
     chainId: monadTestnet.id,
-    query: { staleTime: 0, refetchOnMount: "always" },
+    query: { enabled: !isClub, staleTime: 0, refetchOnMount: "always" },
   });
 
-  const { data: claimed, refetch: refetchClaimed } = useReadContract({
+  const { data: joined } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "hasEverJoined",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { enabled: isClub },
+  });
+  const { data: donated } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "lifetimeDonatedAllClubs",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { enabled: isClub },
+  });
+  const { data: passed } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "proposalsPassedCount",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { enabled: isClub },
+  });
+  const { data: votes } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "votesCastCount",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { enabled: isClub },
+  });
+  const { data: clubSize } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "clubMemberCountFor",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { enabled: isClub },
+  });
+
+  const clubProgressValue = (() => {
+    if (!isClub) return 0;
+    if (achievement.criterion === "club_join") return joined ? 1 : 0;
+    if (achievement.criterion === "club_donate")
+      return (donated as bigint | undefined) && (donated as bigint) > 0n ? 1 : 0;
+    if (achievement.criterion === "club_pass_proposal")
+      return Number(passed ?? 0n) > 0 ? 1 : 0;
+    if (achievement.criterion === "club_votes") return Number(votes ?? 0n);
+    if (achievement.criterion === "club_size") return Number(clubSize ?? 0n);
+    return 0;
+  })();
+
+  const { data: claimedRun, refetch: refetchClaimedRun } = useReadContract({
     address: NFT_CONTRACT,
     abi: ACHIEVEMENT_NFT_ABI,
     functionName: "hasClaimed",
     args: [address, chainId],
     chainId: monadTestnet.id,
-    query: { staleTime: 0, refetchOnMount: "always" },
+    query: { enabled: !isClub, staleTime: 0, refetchOnMount: "always" },
   });
 
-  const { data: eligible, refetch: refetchEligible } = useReadContract({
+  const { data: eligibleRun, refetch: refetchEligibleRun } = useReadContract({
     address: NFT_CONTRACT,
     abi: ACHIEVEMENT_NFT_ABI,
     functionName: "eligible",
     args: [address, chainId],
     chainId: monadTestnet.id,
-    query: { staleTime: 0, refetchOnMount: "always" },
+    query: { enabled: !isClub, staleTime: 0, refetchOnMount: "always" },
   });
 
+  const { data: claimedClub, refetch: refetchClaimedClub } = useReadContract({
+    address: CLUB_BADGE_NFT,
+    abi: CLUB_BADGE_ABI,
+    functionName: "hasClaimed",
+    args: [address, badgeId],
+    chainId: monadTestnet.id,
+    query: {
+      enabled: isClub && badgesLive,
+      staleTime: 0,
+      refetchOnMount: "always",
+    },
+  });
+
+  const { data: eligibleClub, refetch: refetchEligibleClub } = useReadContract({
+    address: CLUB_BADGE_NFT,
+    abi: CLUB_BADGE_ABI,
+    functionName: "eligible",
+    args: [address, badgeId],
+    chainId: monadTestnet.id,
+    query: {
+      enabled: isClub && badgesLive,
+      staleTime: 0,
+      refetchOnMount: "always",
+    },
+  });
+
+  const claimed = isClub ? claimedClub : claimedRun;
+  const eligible = isClub ? eligibleClub : eligibleRun;
   const stats = parseRunnerStats(statsRaw);
-  const progress = progressForAchievement(achievement, stats);
+  const progress = progressForAchievement(
+    achievement,
+    stats,
+    clubProgressValue,
+  );
   const status = claimStatus(Boolean(claimed), Boolean(eligible));
 
   const {
@@ -106,15 +199,23 @@ export function AchievementDetailScreen({
 
   useEffect(() => {
     if (!isSuccess || receiptReverted) return;
-    void refetchClaimed();
-    void refetchEligible();
-    void refetchStats();
+    if (isClub) {
+      void refetchClaimedClub();
+      void refetchEligibleClub();
+    } else {
+      void refetchClaimedRun();
+      void refetchEligibleRun();
+      void refetchStats();
+    }
     setWarning(null);
   }, [
     isSuccess,
     receiptReverted,
-    refetchClaimed,
-    refetchEligible,
+    isClub,
+    refetchClaimedClub,
+    refetchEligibleClub,
+    refetchClaimedRun,
+    refetchEligibleRun,
     refetchStats,
   ]);
 
@@ -125,6 +226,21 @@ export function AchievementDetailScreen({
     }
     setWarning(null);
     reset();
+    if (isClub) {
+      if (!badgesLive) {
+        setWarning("Club badge contract not configured.");
+        return;
+      }
+      writeContract({
+        address: CLUB_BADGE_NFT,
+        abi: CLUB_BADGE_ABI,
+        functionName: "claim",
+        args: [badgeId],
+        chainId: monadTestnet.id,
+        gas: CLAIM_BADGE_GAS,
+      });
+      return;
+    }
     writeContract({
       address: NFT_CONTRACT,
       abi: ACHIEVEMENT_NFT_ABI,
@@ -142,7 +258,7 @@ export function AchievementDetailScreen({
         ? canClaim
           ? "Ready to claim NFT"
           : "Eligible (owner can claim)"
-        : "Locked — keep running";
+        : "Locked — keep going";
 
   return (
     <section className="achieve-detail" aria-label="Achievement detail">
@@ -185,14 +301,16 @@ export function AchievementDetailScreen({
             <dd>{formatBoostBps(achievement.stakingBoostBps)}</dd>
           </div>
           <div className="achieve-detail__meta-row">
-            <dt>On-chain ID</dt>
-            <dd>#{achievement.chainId}</dd>
+            <dt>{isClub ? "Club badge" : "On-chain ID"}</dt>
+            <dd>#{isClub ? badgeId : achievement.chainId}</dd>
           </div>
         </dl>
         <p className="achieve-detail__hint">
           {canClaim
-            ? "Eligibility uses attested Monad stats — import and verify runs so the claim unlocks."
-            : "View only — achievement NFTs can only be claimed by this runner’s connected wallet."}
+            ? isClub
+              ? "Club badges unlock from membership, donations, votes, and roster size."
+              : "Eligibility uses attested Monad stats — import and verify runs so the claim unlocks."
+            : "View only — badges can only be claimed by this runner’s wallet."}
         </p>
       </div>
 
@@ -229,7 +347,12 @@ export function AchievementDetailScreen({
             View only
           </Button>
         )}
-        <Button variant="ghost" block onClick={onBack} disabled={busy && canClaim}>
+        <Button
+          variant="ghost"
+          block
+          onClick={onBack}
+          disabled={busy && canClaim}
+        >
           Back to profile
         </Button>
       </div>

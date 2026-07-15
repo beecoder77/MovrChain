@@ -64,6 +64,15 @@ function mapKnownFailure(combined: string): string | null {
   if (combined.includes("out of gas") || combined.includes("intrinsic gas too low")) {
     return "Transaction ran out of gas on Monad. Retry — the gas limit was too low for this write (unused gas is refunded, so a higher limit does not raise the fee by itself).";
   }
+  if (combined.includes("voted")) {
+    return "You already voted on this proposal.";
+  }
+  if (combined.includes("voting open")) {
+    return "Execute unlocks after every member votes, or 24 hours after the proposal.";
+  }
+  if (combined.includes("not passed")) {
+    return "This proposal does not have a yes majority yet.";
+  }
   if (
     combined.includes("execution reverted") ||
     combined.includes("revert") ||

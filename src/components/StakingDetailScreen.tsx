@@ -19,14 +19,23 @@ import {
   STAKING_CONTRACT,
   UNSTAKE_GAS,
 } from "../lib/achievements";
+import {
+  CLUB_REGISTRY,
+  CLUB_REGISTRY_ABI,
+  formatDonateBps,
+  MAX_DONATE_BPS,
+  MIN_DONATE_BPS,
+  SET_DONATE_BPS_GAS,
+} from "../lib/clubs";
 import { formatWalletError } from "../lib/errors";
 import { Alert, Button } from "../design-system/components";
+import { zeroAddress } from "viem";
 
 type StakingDetailScreenProps = {
   /** Stake subject — writes only when equal to viewerAddress */
   address: `0x${string}`;
   viewerAddress: `0x${string}`;
-  onBack: () => void;
+  onBack?: () => void;
 };
 
 export function StakingDetailScreen({
@@ -35,8 +44,10 @@ export function StakingDetailScreen({
   onBack,
 }: StakingDetailScreenProps) {
   const [amount, setAmount] = useState("10");
+  const [donateInput, setDonateInput] = useState("2.5");
   const [warning, setWarning] = useState<string | null>(null);
   const canAct = viewerAddress.toLowerCase() === address.toLowerCase();
+  const clubsLive = CLUB_REGISTRY !== zeroAddress;
 
   const { data: stakeRaw, refetch: refetchStake } = useReadContract({
     address: STAKING_CONTRACT,
@@ -82,6 +93,27 @@ export function StakingDetailScreen({
     query: { staleTime: 0, refetchOnMount: "always" },
   });
 
+  const { data: donateBpsRaw, refetch: refetchDonate } = useReadContract({
+    address: STAKING_CONTRACT,
+    abi: STAKING_ABI,
+    functionName: "donateBps",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { staleTime: 0, refetchOnMount: "always" },
+  });
+
+  const { data: clubIdRaw } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "clubOf",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { enabled: clubsLive },
+  });
+
+  const donateBps = Number(donateBpsRaw ?? 0);
+  const inClub = Boolean(clubIdRaw && (clubIdRaw as bigint) > 0n);
+
   const staked =
     stakeRaw && Array.isArray(stakeRaw)
       ? (stakeRaw[0] as bigint)
@@ -125,6 +157,7 @@ export function StakingDetailScreen({
     void refetchPending();
     void refetchBal();
     void refetchAllowance();
+    void refetchDonate();
     setWarning(null);
   }, [
     isSuccess,
@@ -132,6 +165,7 @@ export function StakingDetailScreen({
     refetchPending,
     refetchBal,
     refetchAllowance,
+    refetchDonate,
   ]);
 
   const run = (fn: () => void) => {
@@ -218,6 +252,38 @@ export function StakingDetailScreen({
     );
   };
 
+  const handleSetDonate = () => {
+    if (!canAct) {
+      setWarning("You can only set donate from your wallet.");
+      return;
+    }
+    const pct = Number(donateInput);
+    if (!Number.isFinite(pct)) {
+      setWarning("Enter a percent between 2 and 5, or 0 to turn off.");
+      return;
+    }
+    let bps = Math.round(pct * 100);
+    if (pct === 0) bps = 0;
+    else if (bps < MIN_DONATE_BPS || bps > MAX_DONATE_BPS) {
+      setWarning("Donate must be 2–5% (200–500 bps), or 0 to disable.");
+      return;
+    }
+    if (bps > 0 && !inClub) {
+      setWarning("Join a club before enabling yield donate.");
+      return;
+    }
+    run(() =>
+      writeContract({
+        address: STAKING_CONTRACT,
+        abi: STAKING_ABI,
+        functionName: "setDonateBps",
+        args: [bps],
+        chainId: monadTestnet.id,
+        gas: SET_DONATE_BPS_GAS,
+      }),
+    );
+  };
+
   const handleClaim = () => {
     if (!canAct) {
       setWarning("You can only claim rewards for your own wallet.");
@@ -239,11 +305,14 @@ export function StakingDetailScreen({
   };
 
   return (
-    <section className="stack-detail" aria-label="Staking detail">
+    <section className="stack-detail" aria-labelledby="staking-heading">
       <header className="stack-detail__header">
-        <h1 className="stack-detail__title">MOVR staking</h1>
+        <h1 id="staking-heading" className="stack-detail__title">
+          Staking
+        </h1>
         <p className="stack-detail__sub">
-          Stake MOVR. Achievement NFTs boost your reward rate.
+          Stake MOVR for boost and rewards. Optionally donate 2–5% of claim
+          yield to your club treasury — top donors earn 3× voting power.
         </p>
       </header>
 
@@ -297,6 +366,41 @@ export function StakingDetailScreen({
         </button>
       </label>
 
+      <div className="stack-detail__donate">
+        <p className="stack-detail__field-label">
+          Club treasury donate (now{" "}
+          {donateBps > 0 ? formatDonateBps(donateBps) : "off"})
+        </p>
+        <p className="stack-detail__donate-copy">
+          On each claim, this % of rewards goes to your club treasury. Members:
+          1× vote · Club NFT: 2× · Top 3 donors: 3×.
+        </p>
+        <div className="stack-detail__donate-row">
+          <input
+            className="stack-detail__input"
+            type="text"
+            inputMode="decimal"
+            value={donateInput}
+            onChange={(e) => setDonateInput(e.target.value)}
+            placeholder="2.5"
+            disabled={busy || !canAct}
+            aria-label="Donate percent"
+          />
+          <span className="stack-detail__donate-unit">%</span>
+        </div>
+        {canAct && (
+          <Button
+            variant="secondary"
+            block
+            loading={busy}
+            disabled={busy}
+            onClick={handleSetDonate}
+          >
+            Save donate %
+          </Button>
+        )}
+      </div>
+
       {!canAct && (
         <Alert tone="warning" className="ds-alert--footer-spaced">
           View only — staking actions are locked to your connected wallet.
@@ -347,9 +451,11 @@ export function StakingDetailScreen({
             </Button>
           </>
         )}
-        <Button variant="ghost" block onClick={onBack} disabled={busy && canAct}>
-          Back to profile
-        </Button>
+        {onBack && (
+          <Button variant="ghost" block onClick={onBack} disabled={busy && canAct}>
+            Back
+          </Button>
+        )}
       </div>
     </section>
   );

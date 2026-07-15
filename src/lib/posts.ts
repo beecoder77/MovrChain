@@ -19,7 +19,12 @@ export type RunPost = {
 export type AchievementCriterion =
   | "single_run_meters"
   | "total_distance_meters"
-  | "streak_days";
+  | "streak_days"
+  | "club_join"
+  | "club_donate"
+  | "club_pass_proposal"
+  | "club_size"
+  | "club_votes";
 
 export type AchievementDef = {
   /** Matches on-chain achievementId when synced */
@@ -32,6 +37,8 @@ export type AchievementDef = {
   threshold: number;
   /** Basis points added to staking reward rate when NFT claimed */
   stakingBoostBps: number;
+  /** Club badge NFT id when criterion is club_* (0–5) */
+  clubBadgeId?: number;
 };
 
 export type Achievement = AchievementDef & {
@@ -142,6 +149,72 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     criterion: "total_distance_meters",
     threshold: 100000,
     stakingBoostBps: 1500,
+  },
+  {
+    id: "club-join",
+    chainId: 11,
+    title: "Join a Club",
+    description: "Join or create a running club on Monad",
+    image: "/brand/achievements/1k.svg",
+    criterion: "club_join",
+    threshold: 1,
+    stakingBoostBps: 200,
+    clubBadgeId: 0,
+  },
+  {
+    id: "club-donatur",
+    chainId: 12,
+    title: "Club Donatur",
+    description: "Send staking yield or MOVR into a club treasury",
+    image: "/brand/achievements/total-10k.svg",
+    criterion: "club_donate",
+    threshold: 1,
+    stakingBoostBps: 300,
+    clubBadgeId: 1,
+  },
+  {
+    id: "club-pulse-payer",
+    chainId: 13,
+    title: "Pulse Payer",
+    description: "Pass a club treasury proposal you authored",
+    image: "/brand/achievements/5k.svg",
+    criterion: "club_pass_proposal",
+    threshold: 1,
+    stakingBoostBps: 400,
+    clubBadgeId: 2,
+  },
+  {
+    id: "club-squad-5",
+    chainId: 14,
+    title: "Squad of 5",
+    description: "Be in a club that reaches 5 members",
+    image: "/brand/achievements/streak-7.svg",
+    criterion: "club_size",
+    threshold: 5,
+    stakingBoostBps: 500,
+    clubBadgeId: 3,
+  },
+  {
+    id: "club-full-roster",
+    chainId: 15,
+    title: "Full Roster",
+    description: "Be in a club that hits the 10-member cap",
+    image: "/brand/achievements/streak-14.svg",
+    criterion: "club_size",
+    threshold: 10,
+    stakingBoostBps: 800,
+    clubBadgeId: 4,
+  },
+  {
+    id: "club-consensus",
+    chainId: 16,
+    title: "Consensus",
+    description: "Cast at least 3 votes on club proposals",
+    image: "/brand/achievements/streak-30.svg",
+    criterion: "club_votes",
+    threshold: 3,
+    stakingBoostBps: 300,
+    clubBadgeId: 5,
   },
 ];
 
@@ -272,7 +345,9 @@ export function computeAchievements(posts: RunPost[]): Achievement[] {
     let unlocked = false;
     if (def.criterion === "single_run_meters") unlocked = bestSingle >= def.threshold;
     else if (def.criterion === "total_distance_meters") unlocked = totalMeters >= def.threshold;
-    else unlocked = streak >= def.threshold;
+    else if (def.criterion === "streak_days") unlocked = streak >= def.threshold;
+    // Club achievements are determined on-chain — keep locked for local GPX stats
+    else unlocked = false;
 
     return {
       ...def,

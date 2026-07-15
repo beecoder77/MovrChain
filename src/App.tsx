@@ -16,6 +16,7 @@ import { RunReplay } from "./components/RunReplay";
 import { RunSummary } from "./components/RunSummary";
 import { VerifyClaim } from "./components/VerifyClaim";
 import { RunDetailScreen } from "./components/RunDetailScreen";
+import { ClubsScreen, ClubDetailScreen } from "./components/ClubsScreen";
 import { StakingDetailScreen } from "./components/StakingDetailScreen";
 import { AchievementDetailScreen } from "./components/AchievementDetailScreen";
 
@@ -41,13 +42,13 @@ export default function App() {
   const [logStep, setLogStep] = useState<LogStep | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [detailPost, setDetailPost] = useState<RunPost | null>(null);
-  const [stakingOpen, setStakingOpen] = useState(false);
   const [achievementView, setAchievementView] =
     useState<AchievementView | null>(null);
   /** Other runner overlay — never used for write actions */
   const [viewedProfile, setViewedProfile] = useState<`0x${string}` | null>(
     null,
   );
+  const [openClubId, setOpenClubId] = useState<bigint | null>(null);
   const [run, setRun] = useState<ParsedRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -126,9 +127,9 @@ export default function App() {
     setError(null);
     setEditingProfile(false);
     setDetailPost(null);
-    setStakingOpen(false);
     setAchievementView(null);
     setViewedProfile(null);
+    setOpenClubId(null);
     setTab("feed");
   }, []);
 
@@ -148,18 +149,16 @@ export default function App() {
     (runner: `0x${string}`) => {
       if (address && runner.toLowerCase() === address.toLowerCase()) {
         setViewedProfile(null);
-        setDetailPost(null);
-        setAchievementView(null);
-        setStakingOpen(false);
-        setEditingProfile(false);
-        setTab("profile");
-        return;
-      }
       setDetailPost(null);
       setAchievementView(null);
-      setStakingOpen(false);
       setEditingProfile(false);
-      setViewedProfile(runner);
+      setTab("profile");
+      return;
+    }
+    setDetailPost(null);
+    setAchievementView(null);
+    setEditingProfile(false);
+    setViewedProfile(runner);
     },
     [address],
   );
@@ -245,22 +244,6 @@ export default function App() {
     );
   }
 
-  if (stakingOpen) {
-    return (
-      <AppShell
-        brand="MovrChain"
-        headerRight={<WalletChip address={address} connected />}
-        onBrandClick={goToFeed}
-      >
-        <StakingDetailScreen
-          address={address}
-          viewerAddress={address}
-          onBack={() => setStakingOpen(false)}
-        />
-      </AppShell>
-    );
-  }
-
   if (achievementView) {
     return (
       <AppShell
@@ -274,6 +257,22 @@ export default function App() {
           achievement={achievementView.achievement}
           viewOnly={achievementView.viewOnly}
           onBack={() => setAchievementView(null)}
+        />
+      </AppShell>
+    );
+  }
+
+  if (openClubId !== null) {
+    return (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+      >
+        <ClubDetailScreen
+          address={address}
+          clubId={openClubId}
+          onBack={() => setOpenClubId(null)}
         />
       </AppShell>
     );
@@ -342,13 +341,24 @@ export default function App() {
           onOpenProfile={openRunnerProfile}
         />
       )}
+      {tab === "clubs" && (
+        <ClubsScreen
+          address={address}
+          onOpenClub={(id) => setOpenClubId(id)}
+        />
+      )}
+      {tab === "staking" && (
+        <StakingDetailScreen
+          address={address}
+          viewerAddress={address}
+        />
+      )}
       {tab === "profile" && (
         <ProfileScreen
           address={address}
           posts={yourPosts}
           onLogRun={startLogRun}
           onEditProfile={() => setEditingProfile(true)}
-          onOpenStaking={() => setStakingOpen(true)}
           onOpenAchievement={(achievement) =>
             setAchievementView({
               achievement,
@@ -356,6 +366,8 @@ export default function App() {
               viewOnly: false,
             })
           }
+          onOpenClub={(id) => setOpenClubId(id)}
+          onOpenClubsTab={() => setTab("clubs")}
         />
       )}
     </AppShell>

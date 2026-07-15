@@ -1,3 +1,4 @@
+import { zeroAddress } from "viem";
 import { useDisconnect, useReadContract, useReadContracts } from "wagmi";
 import { monadTestnet } from "viem/chains";
 import type { AchievementDef, RunPost } from "../lib/posts";
@@ -13,12 +14,19 @@ import {
 import {
   ACHIEVEMENT_NFT_ABI,
   claimStatus,
-  formatBoostBps,
-  formatMovr,
+  isClubAchievement,
   NFT_CONTRACT,
   STAKING_ABI,
   STAKING_CONTRACT,
 } from "../lib/achievements";
+import {
+  CLUB_BADGE_ABI,
+  CLUB_BADGE_NFT,
+  CLUB_REGISTRY,
+  CLUB_REGISTRY_ABI,
+  formatDonateBps,
+  parseClub,
+} from "../lib/clubs";
 import { avatarSrc, displayName, formatHandle } from "../lib/profile";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
 import { Button, WalletChip } from "../design-system/components";
@@ -28,8 +36,9 @@ type ProfileScreenProps = {
   posts: RunPost[];
   onLogRun: () => void;
   onEditProfile: () => void;
-  onOpenStaking: () => void;
   onOpenAchievement: (achievement: AchievementDef) => void;
+  onOpenClub: (clubId: bigint) => void;
+  onOpenClubsTab: () => void;
 };
 
 function AchievementCard({
@@ -79,11 +88,14 @@ export function ProfileScreen({
   posts,
   onLogRun,
   onEditProfile,
-  onOpenStaking,
   onOpenAchievement,
+  onOpenClub,
+  onOpenClubsTab,
 }: ProfileScreenProps) {
   const { disconnect } = useDisconnect();
   const { profile, isLoading } = useRunnerProfile(address);
+  const clubsLive = CLUB_REGISTRY !== zeroAddress;
+  const badgesLive = CLUB_BADGE_NFT !== zeroAddress;
 
   const stats = getProfileStats(posts);
   const localAchievements = computeAchievements(posts);
@@ -93,34 +105,40 @@ export function ProfileScreen({
     isLoading && !profile.exists ? "Loading…" : displayName(profile, address);
   const handleLabel = profile.exists ? formatHandle(profile.handle) : "";
 
-  const { data: stakeRaw } = useReadContract({
-    address: STAKING_CONTRACT,
-    abi: STAKING_ABI,
-    functionName: "stakes",
+  const { data: clubIdRaw } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "clubOf",
     args: [address],
     chainId: monadTestnet.id,
-    query: { staleTime: 8_000, refetchOnMount: "always" },
+    query: { enabled: clubsLive, staleTime: 8_000 },
   });
+  const myClubId = (clubIdRaw as bigint | undefined) ?? 0n;
 
-  const { data: pending } = useReadContract({
-    address: STAKING_CONTRACT,
-    abi: STAKING_ABI,
-    functionName: "pendingReward",
-    args: [address],
+  const { data: clubRaw } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "getClub",
+    args: myClubId > 0n ? [myClubId] : undefined,
     chainId: monadTestnet.id,
-    query: { staleTime: 8_000, refetchOnMount: "always" },
+    query: { enabled: clubsLive && myClubId > 0n },
   });
+  const myClub = myClubId > 0n ? parseClub(myClubId, clubRaw) : null;
 
-  const { data: boostBps } = useReadContract({
+  const { data: donateBpsRaw } = useReadContract({
     address: STAKING_CONTRACT,
     abi: STAKING_ABI,
-    functionName: "boostBpsOf",
+    functionName: "donateBps",
     args: [address],
     chainId: monadTestnet.id,
   });
+  const donateBps = Number(donateBpsRaw ?? 0);
+
+  const runAchievements = ACHIEVEMENTS.filter((a) => !isClubAchievement(a));
+  const clubAchievements = ACHIEVEMENTS.filter((a) => isClubAchievement(a));
 
   const claimReads = useReadContracts({
-    contracts: ACHIEVEMENTS.flatMap((a) => [
+    contracts: runAchievements.flatMap((a) => [
       {
         address: NFT_CONTRACT,
         abi: ACHIEVEMENT_NFT_ABI,
@@ -139,17 +157,39 @@ export function ProfileScreen({
     query: { staleTime: 8_000, refetchOnMount: "always" },
   });
 
-  const staked =
-    stakeRaw && Array.isArray(stakeRaw)
-      ? (stakeRaw[0] as bigint)
-      : 0n;
-  const pendingWei = (pending as bigint | undefined) ?? 0n;
-  const boost = Number(boostBps ?? 0n);
+  const clubBadgeReads = useReadContracts({
+    contracts: clubAchievements.flatMap((a) => [
+      {
+        address: CLUB_BADGE_NFT,
+        abi: CLUB_BADGE_ABI,
+        functionName: "hasClaimed" as const,
+        args: [address, a.clubBadgeId!] as const,
+        chainId: monadTestnet.id,
+      },
+      {
+        address: CLUB_BADGE_NFT,
+        abi: CLUB_BADGE_ABI,
+        functionName: "eligible" as const,
+        args: [address, a.clubBadgeId!] as const,
+        chainId: monadTestnet.id,
+      },
+    ]),
+    query: {
+      enabled: badgesLive,
+      staleTime: 8_000,
+      refetchOnMount: "always",
+    },
+  });
 
-  const claimedCount = ACHIEVEMENTS.filter((_, i) => {
+  const claimedRun = runAchievements.filter((_, i) => {
     const row = claimReads.data?.[i * 2];
     return row?.status === "success" && Boolean(row.result);
   }).length;
+  const claimedClub = clubAchievements.filter((_, i) => {
+    const row = clubBadgeReads.data?.[i * 2];
+    return row?.status === "success" && Boolean(row.result);
+  }).length;
+  const claimedCount = claimedRun + claimedClub;
 
   return (
     <section className="profile-screen" aria-labelledby="profile-heading">
@@ -227,37 +267,47 @@ export function ProfileScreen({
       </div>
 
       <section
-        className="profile-screen__staking"
-        aria-labelledby="staking-heading"
+        className="profile-screen__club"
+        aria-labelledby="club-heading"
       >
         <div className="profile-screen__section-head">
-          <h2 id="staking-heading" className="profile-screen__section-title">
-            Staking
+          <h2 id="club-heading" className="profile-screen__section-title">
+            Club
           </h2>
           <span className="profile-screen__section-meta">
-            {formatBoostBps(boost)} boost
+            {donateBps > 0
+              ? `${formatDonateBps(donateBps)} yield donate`
+              : "No yield donate"}
           </span>
         </div>
-        <button
-          type="button"
-          className="staking-card"
-          onClick={onOpenStaking}
-          aria-label="Open staking detail"
-        >
-          <div className="staking-card__row">
-            <span className="staking-card__label">Staked</span>
-            <span className="staking-card__value">
-              {formatMovr(staked)} MOVR
-            </span>
-          </div>
-          <div className="staking-card__row">
-            <span className="staking-card__label">Pending</span>
-            <span className="staking-card__value">
-              {formatMovr(pendingWei)} MOVR
-            </span>
-          </div>
-          <div className="staking-card__cta">View staking detail</div>
-        </button>
+        {myClub ? (
+          <button
+            type="button"
+            className="staking-card"
+            onClick={() => onOpenClub(myClub.clubId)}
+            aria-label={`Open club ${myClub.name}`}
+          >
+            <div className="staking-card__row">
+              <span className="staking-card__label">{myClub.name}</span>
+              <span className="staking-card__value">
+                {myClub.memberCount}/10
+              </span>
+            </div>
+            <div className="staking-card__cta">Treasury & voting</div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="staking-card"
+            onClick={onOpenClubsTab}
+            aria-label="Join or create a club"
+          >
+            <div className="staking-card__row">
+              <span className="staking-card__label">No club yet</span>
+            </div>
+            <div className="staking-card__cta">Browse Clubs</div>
+          </button>
+        )}
       </section>
 
       <section
@@ -273,15 +323,32 @@ export function ProfileScreen({
           </h2>
           <span className="profile-screen__section-meta">
             {claimedCount}/{ACHIEVEMENTS.length} NFTs
-            {unlockedLocal > claimedCount
-              ? ` · ${unlockedLocal} local`
+            {unlockedLocal > claimedRun
+              ? ` · ${unlockedLocal} local runs`
               : ""}
           </span>
         </div>
         <div className="profile-screen__achievement-grid">
-          {ACHIEVEMENTS.map((a, i) => {
+          {runAchievements.map((a, i) => {
             const claimedRow = claimReads.data?.[i * 2];
             const eligibleRow = claimReads.data?.[i * 2 + 1];
+            const claimed =
+              claimedRow?.status === "success" && Boolean(claimedRow.result);
+            const eligible =
+              eligibleRow?.status === "success" && Boolean(eligibleRow.result);
+            const status = claimStatus(claimed, eligible);
+            return (
+              <AchievementCard
+                key={a.id}
+                achievement={a}
+                status={status}
+                onOpen={() => onOpenAchievement(a)}
+              />
+            );
+          })}
+          {clubAchievements.map((a, i) => {
+            const claimedRow = clubBadgeReads.data?.[i * 2];
+            const eligibleRow = clubBadgeReads.data?.[i * 2 + 1];
             const claimed =
               claimedRow?.status === "success" && Boolean(claimedRow.result);
             const eligible =

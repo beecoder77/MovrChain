@@ -15,11 +15,13 @@ export PRIVATE_KEY
 
 : "${MOVR_TOKEN:?}"
 : "${ATTESTATION:?}"
+# Club cut (1 MOVR/10km) requires a redeployed registry with setMilestoneReward
+: "${CLUB_REGISTRY:?Set CLUB_REGISTRY in contracts/.env (redeploy clubs first)}"
 
 RPC="${RPC_URL:-https://testnet-rpc.monad.xyz}"
 FUND_AMOUNT="${FUND_AMOUNT:-100000000000000000000000}" # 100_000 MOVR
 
-echo "1/3 Deploying MovrMilestoneReward…"
+echo "1/3 Deploying MovrMilestoneReward (wire CLUB_REGISTRY=$CLUB_REGISTRY)…"
 OUT=$(forge script script/DeployMilestoneReward.s.sol:DeployMilestoneReward \
   --rpc-url "$RPC" \
   --broadcast \
