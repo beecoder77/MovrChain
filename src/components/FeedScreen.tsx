@@ -12,11 +12,18 @@ type FeedScreenProps = {
   address: `0x${string}`;
   loading?: boolean;
   onLogRun: () => void;
+  onOpenPost: (post: RunPost) => void;
 };
 
-function CommunityPost({ post }: { post: RunPost }) {
+function CommunityPost({
+  post,
+  onOpen,
+}: {
+  post: RunPost;
+  onOpen: (post: RunPost) => void;
+}) {
   const { profile } = useRunnerProfile(post.address as `0x${string}`);
-  return <TimelinePost post={post} profile={profile} />;
+  return <TimelinePost post={post} profile={profile} onOpen={onOpen} />;
 }
 
 export function FeedScreen({
@@ -25,6 +32,7 @@ export function FeedScreen({
   address,
   loading,
   onLogRun,
+  onOpenPost,
 }: FeedScreenProps) {
   const [tab, setTab] = useState<FeedTab>("yours");
   const { profile: ownProfile } = useRunnerProfile(address);
@@ -52,14 +60,11 @@ export function FeedScreen({
           Activity
         </h1>
         <p className="feed-screen__sub">
-          Your runs stay under your wallet. Community is the public board.
+          Your runs stay under your wallet. Community is the public board. Tap a
+          run to preview the route map.
         </p>
 
-        <div
-          className="feed-tabs"
-          role="tablist"
-          aria-label="Feed type"
-        >
+        <div className="feed-tabs" role="tablist" aria-label="Feed type">
           <button
             type="button"
             role="tab"
@@ -116,12 +121,17 @@ export function FeedScreen({
             {tab === "yours"
               ? yourPosts.map((post) => (
                   <li key={post.id}>
-                    <TimelinePost post={post} isOwn profile={ownProfile} />
+                    <TimelinePost
+                      post={post}
+                      isOwn
+                      profile={ownProfile}
+                      onOpen={onOpenPost}
+                    />
                   </li>
                 ))
               : communityPosts.map((post) => (
                   <li key={post.id}>
-                    <CommunityPost post={post} />
+                    <CommunityPost post={post} onOpen={onOpenPost} />
                   </li>
                 ))}
           </ol>

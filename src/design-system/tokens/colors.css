@@ -27,9 +27,10 @@
   --color-warning: oklch(0.62 0.16 75);
   --color-warning-surface: oklch(0.96 0.04 75);
 
-  /* Domain-specific */
+  /* Domain-specific — brand orange track (never light stroke as the line) */
   --color-map-underlay: oklch(0.45 0.08 42);
-  --color-route-line: oklch(0.99 0 0);
+  --color-route-line: oklch(0.52 0.22 42);
+  --color-route-line-outline: oklch(0.28 0.04 42);
 
   /* Semantic aliases */
   --color-text: var(--color-ink);

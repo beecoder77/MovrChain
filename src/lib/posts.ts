@@ -1,6 +1,7 @@
 import type { ParsedRun } from "./gpx";
 import { computeRunHash, meetsMilestone } from "./chain";
 import { formatDistance, formatDuration, formatPace } from "./gpx";
+import { saveRouteFromRun } from "./routes";
 
 export type RunPost = {
   id: string;
@@ -168,20 +169,30 @@ export function addVerifiedPost(
   run: ParsedRun,
   txHash?: string,
 ): { post: RunPost; saved: boolean } {
+  const runHash = computeRunHash(run);
   const post: RunPost = {
     id: crypto.randomUUID(),
     address,
     runName: run.name.trim() || "Untitled run",
     distanceMeters: run.totalDistanceMeters,
     durationSeconds: run.durationSeconds,
-    runHash: computeRunHash(run),
+    runHash,
     verifiedAt: new Date().toISOString(),
     txHash,
     milestoneMet: meetsMilestone(run.totalDistanceMeters),
   };
+  saveRouteFromRun(run, runHash);
   const all = loadAll();
-  all.unshift(post);
-  const saved = saveAll(all);
+  // Deduplicate by runHash for this address
+  const filtered = all.filter(
+    (p) =>
+      !(
+        p.runHash.toLowerCase() === runHash.toLowerCase() &&
+        p.address.toLowerCase() === address.toLowerCase()
+      ),
+  );
+  filtered.unshift(post);
+  const saved = saveAll(filtered);
   return { post, saved };
 }
 

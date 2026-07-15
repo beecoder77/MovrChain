@@ -13,6 +13,9 @@ import {
   rewardLabelForDistance,
 } from "../lib/chain";
 import { FEED_ABI, FEED_CONTRACT_ADDRESS, publishRunName } from "../lib/feed";
+import { downsamplePoints } from "../lib/gpx";
+import { saveRouteFromRun } from "../lib/routes";
+import { RouteMap } from "./RouteMap";
 import { EXPLORER_URL } from "../lib/wagmi";
 import { formatAttestationFailure, isAlreadyAttestedError } from "../lib/errors";
 import {
@@ -40,16 +43,23 @@ type VerifyClaimProps = {
 
 type PipelineStepId = "parsed" | "attested" | "published" | "reward";
 
-const ATTEST_GAS = 250_000n;
-const PUBLISH_GAS = 250_000n;
-const CLAIM_GAS = 200_000n;
+/** Monad gas estimates run low; publish stores a string + several slots (~208k on Anvil). */
+const ATTEST_GAS = 300_000n;
+const PUBLISH_GAS = 600_000n;
+const CLAIM_GAS = 350_000n;
 
 export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
   const runHash = computeRunHash(run);
   const runName = publishRunName(run.name);
   const milestone = meetsMilestone(run.totalDistanceMeters);
   const rewardLabel = rewardLabelForDistance(run.totalDistanceMeters);
+  const mapPoints = downsamplePoints(run.points, 200);
   const { address } = useAccount();
+
+  // Keep map available for feed detail after attest
+  useEffect(() => {
+    saveRouteFromRun(run, runHash);
+  }, [run, runHash]);
 
   const {
     writeContract: writeAttest,
@@ -445,6 +455,10 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
 
   return (
     <section className="verify-screen" aria-label="Verify and publish">
+      <div className="verify-map" aria-label="Route preview">
+        <RouteMap points={mapPoints} progress={1} interactive={false} />
+      </div>
+
       <div className="verify-status">
         <h2 className="verify-heading">
           {finished

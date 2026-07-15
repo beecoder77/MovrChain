@@ -52,6 +52,25 @@ function MapViewport({ bounds }: { bounds: LatLngBoundsExpression }) {
   return null;
 }
 
+function useCssColor(varName: string, fallback: string): string {
+  const [color, setColor] = useState(fallback);
+
+  useEffect(() => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${varName})`;
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    document.body.appendChild(probe);
+    const resolved = getComputedStyle(probe).color;
+    document.body.removeChild(probe);
+    if (resolved && resolved !== "rgba(0, 0, 0, 0)") {
+      setColor(resolved);
+    }
+  }, [varName]);
+
+  return color;
+}
+
 export function RouteMap({
   points,
   progress = 1,
@@ -60,6 +79,8 @@ export function RouteMap({
 }: RouteMapProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [mapReady, setMapReady] = useState(false);
+  const routeColor = useCssColor("--color-route-line", "#c45a1a");
+  const outlineColor = useCssColor("--color-route-line-outline", "#3d2a1f");
 
   const clamped = Math.min(1, Math.max(0, progress));
   const endIndex = Math.max(
@@ -114,12 +135,25 @@ export function RouteMap({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
           <MapViewport bounds={routeBounds} />
+          {/* Soft outline so the route stays readable on light/dark tiles */}
           <Polyline
             positions={positions}
             pathOptions={{
-              color: "var(--color-route-line)",
+              color: outlineColor,
+              weight: 7,
+              opacity: 0.85,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+          <Polyline
+            positions={positions}
+            pathOptions={{
+              color: routeColor,
               weight: 4,
-              opacity: 0.95,
+              opacity: 1,
+              lineCap: "round",
+              lineJoin: "round",
             }}
           />
         </MapContainer>

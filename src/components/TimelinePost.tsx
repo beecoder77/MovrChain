@@ -7,14 +7,22 @@ import {
 } from "../lib/posts";
 import { avatarSrc, displayName, type OnChainProfile } from "../lib/profile";
 import { rewardLabelForDistance } from "../lib/chain";
+import { getRoutePoints, toMapPoints } from "../lib/routes";
+import { RouteMap } from "./RouteMap";
 
 type TimelinePostProps = {
   post: RunPost;
   isOwn?: boolean;
   profile?: OnChainProfile;
+  onOpen?: (post: RunPost) => void;
 };
 
-export function TimelinePost({ post, isOwn, profile }: TimelinePostProps) {
+export function TimelinePost({
+  post,
+  isOwn,
+  profile,
+  onOpen,
+}: TimelinePostProps) {
   let runnerLabel: string;
   if (isOwn) {
     runnerLabel =
@@ -26,9 +34,12 @@ export function TimelinePost({ post, isOwn, profile }: TimelinePostProps) {
   }
 
   const imgSrc = avatarSrc(profile?.exists ? profile.avatarId : 0);
+  const route = getRoutePoints(post.runHash);
+  const mapPoints = route.length >= 2 ? toMapPoints(route) : [];
+  const interactive = Boolean(onOpen);
 
-  return (
-    <article className="timeline-post" aria-label={`Run: ${post.runName}`}>
+  const body = (
+    <>
       <header className="timeline-post__header">
         <img
           className="timeline-post__avatar-img"
@@ -47,6 +58,12 @@ export function TimelinePost({ post, isOwn, profile }: TimelinePostProps) {
           <span className="timeline-post__badge">Verified</span>
         )}
       </header>
+
+      {mapPoints.length >= 2 && (
+        <div className="timeline-post__map" aria-hidden={!interactive}>
+          <RouteMap points={mapPoints} progress={1} interactive={false} />
+        </div>
+      )}
 
       <h3 className="timeline-post__title">{post.runName}</h3>
 
@@ -73,13 +90,34 @@ export function TimelinePost({ post, isOwn, profile }: TimelinePostProps) {
       </dl>
 
       <footer className="timeline-post__footer">
-        <span className="timeline-post__proof">On-chain attestation</span>
+        <span className="timeline-post__proof">
+          {interactive ? "Tap for route detail" : "On-chain attestation"}
+        </span>
         {post.milestoneMet && (
           <span className="timeline-post__reward">
             {rewardLabelForDistance(post.distanceMeters)}
           </span>
         )}
       </footer>
+    </>
+  );
+
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        className="timeline-post timeline-post--button"
+        aria-label={`Open run detail: ${post.runName}`}
+        onClick={() => onOpen(post)}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <article className="timeline-post" aria-label={`Run: ${post.runName}`}>
+      {body}
     </article>
   );
 }
