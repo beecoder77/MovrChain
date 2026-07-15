@@ -15,6 +15,8 @@ type TimelinePostProps = {
   isOwn?: boolean;
   profile?: OnChainProfile;
   onOpen?: (post: RunPost) => void;
+  /** Open this runner's public profile (avatar / name). */
+  onOpenProfile?: (address: `0x${string}`) => void;
 };
 
 export function TimelinePost({
@@ -22,6 +24,7 @@ export function TimelinePost({
   isOwn,
   profile,
   onOpen,
+  onOpenProfile,
 }: TimelinePostProps) {
   let runnerLabel: string;
   if (isOwn) {
@@ -38,27 +41,26 @@ export function TimelinePost({
   const mapPoints = route.length >= 2 ? toMapPoints(route) : [];
   const interactive = Boolean(onOpen);
 
-  const body = (
+  const identityInner = (
     <>
-      <header className="timeline-post__header">
-        <img
-          className="timeline-post__avatar-img"
-          src={imgSrc}
-          alt=""
-          width={36}
-          height={36}
-        />
-        <div className="timeline-post__meta">
-          <span className="timeline-post__runner">{runnerLabel}</span>
-          <time className="timeline-post__time" dateTime={post.verifiedAt}>
-            {formatTimeAgo(post.verifiedAt) || "Recently"}
-          </time>
-        </div>
-        {post.milestoneMet && (
-          <span className="timeline-post__badge">Verified</span>
-        )}
-      </header>
+      <img
+        className="timeline-post__avatar-img"
+        src={imgSrc}
+        alt=""
+        width={36}
+        height={36}
+      />
+      <div className="timeline-post__meta">
+        <span className="timeline-post__runner">{runnerLabel}</span>
+        <time className="timeline-post__time" dateTime={post.verifiedAt}>
+          {formatTimeAgo(post.verifiedAt) || "Recently"}
+        </time>
+      </div>
+    </>
+  );
 
+  const runBody = (
+    <>
       {mapPoints.length >= 2 && (
         <div className="timeline-post__map" aria-hidden={!interactive}>
           <RouteMap points={mapPoints} progress={1} interactive={false} />
@@ -102,22 +104,43 @@ export function TimelinePost({
     </>
   );
 
-  if (onOpen) {
-    return (
-      <button
-        type="button"
-        className="timeline-post timeline-post--button"
-        aria-label={`Open run detail: ${post.runName}`}
-        onClick={() => onOpen(post)}
-      >
-        {body}
-      </button>
-    );
-  }
-
   return (
-    <article className="timeline-post" aria-label={`Run: ${post.runName}`}>
-      {body}
+    <article
+      className={`timeline-post${interactive ? " timeline-post--clickable" : ""}`}
+      aria-label={`Run: ${post.runName}`}
+    >
+      <header className="timeline-post__header">
+        {onOpenProfile ? (
+          <button
+            type="button"
+            className="timeline-post__identity"
+            onClick={() => onOpenProfile(post.address as `0x${string}`)}
+            aria-label={`Open profile: ${runnerLabel}`}
+          >
+            {identityInner}
+          </button>
+        ) : (
+          <div className="timeline-post__identity timeline-post__identity--static">
+            {identityInner}
+          </div>
+        )}
+        {post.milestoneMet && (
+          <span className="timeline-post__badge">Verified</span>
+        )}
+      </header>
+
+      {onOpen ? (
+        <button
+          type="button"
+          className="timeline-post__open"
+          aria-label={`Open run detail: ${post.runName}`}
+          onClick={() => onOpen(post)}
+        >
+          {runBody}
+        </button>
+      ) : (
+        runBody
+      )}
     </article>
   );
 }

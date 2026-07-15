@@ -23,16 +23,20 @@ import { formatWalletError } from "../lib/errors";
 import { Alert, Button } from "../design-system/components";
 
 type StakingDetailScreenProps = {
+  /** Stake subject — writes only when equal to viewerAddress */
   address: `0x${string}`;
+  viewerAddress: `0x${string}`;
   onBack: () => void;
 };
 
 export function StakingDetailScreen({
   address,
+  viewerAddress,
   onBack,
 }: StakingDetailScreenProps) {
   const [amount, setAmount] = useState("10");
   const [warning, setWarning] = useState<string | null>(null);
+  const canAct = viewerAddress.toLowerCase() === address.toLowerCase();
 
   const { data: stakeRaw, refetch: refetchStake } = useReadContract({
     address: STAKING_CONTRACT,
@@ -140,6 +144,10 @@ export function StakingDetailScreen({
   const needsApprove = parsed !== null && parsed > 0n && allow < parsed;
 
   const handleApprove = () => {
+    if (!canAct) {
+      setWarning("You can only stake from your own wallet.");
+      return;
+    }
     if (!parsed || parsed === 0n) {
       setWarning("Enter a valid MOVR amount.");
       return;
@@ -157,6 +165,10 @@ export function StakingDetailScreen({
   };
 
   const handleStake = () => {
+    if (!canAct) {
+      setWarning("You can only stake from your own wallet.");
+      return;
+    }
     if (!parsed || parsed === 0n) {
       setWarning("Enter a valid MOVR amount.");
       return;
@@ -182,6 +194,10 @@ export function StakingDetailScreen({
   };
 
   const handleUnstake = () => {
+    if (!canAct) {
+      setWarning("You can only unstake from your own wallet.");
+      return;
+    }
     if (!parsed || parsed === 0n) {
       setWarning("Enter a valid MOVR amount.");
       return;
@@ -203,6 +219,10 @@ export function StakingDetailScreen({
   };
 
   const handleClaim = () => {
+    if (!canAct) {
+      setWarning("You can only claim rewards for your own wallet.");
+      return;
+    }
     if (pendingWei === 0n) {
       setWarning("No rewards to claim yet.");
       return;
@@ -263,7 +283,7 @@ export function StakingDetailScreen({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="10"
-          disabled={busy}
+          disabled={busy || !canAct}
         />
         <button
           type="button"
@@ -271,11 +291,17 @@ export function StakingDetailScreen({
           onClick={() =>
             setAmount(formatUnits(balance > 0n ? balance : 0n, 18))
           }
-          disabled={busy || balance === 0n}
+          disabled={busy || !canAct || balance === 0n}
         >
           Max wallet
         </button>
       </label>
+
+      {!canAct && (
+        <Alert tone="warning" className="ds-alert--footer-spaced">
+          View only — staking actions are locked to your connected wallet.
+        </Alert>
+      )}
 
       {warning && (
         <Alert tone="warning" className="ds-alert--footer-spaced">
@@ -283,41 +309,45 @@ export function StakingDetailScreen({
         </Alert>
       )}
 
-      {isSuccess && !warning && (
+      {isSuccess && !warning && canAct && (
         <Alert tone="warning" className="ds-alert--footer-spaced">
           Transaction confirmed on Monad.
         </Alert>
       )}
 
       <div className="stack-detail__actions">
-        {needsApprove ? (
+        {canAct && needsApprove ? (
           <Button block loading={busy} disabled={busy} onClick={handleApprove}>
             {busy ? "Approving…" : "Approve MOVR"}
           </Button>
-        ) : (
+        ) : canAct ? (
           <Button block loading={busy} disabled={busy} onClick={handleStake}>
             {busy ? "Staking…" : "Stake MOVR"}
           </Button>
+        ) : null}
+        {canAct && (
+          <>
+            <Button
+              variant="secondary"
+              block
+              loading={busy}
+              disabled={busy || staked === 0n}
+              onClick={handleUnstake}
+            >
+              Unstake
+            </Button>
+            <Button
+              variant="secondary"
+              block
+              loading={busy}
+              disabled={busy || pendingWei === 0n}
+              onClick={handleClaim}
+            >
+              Claim rewards
+            </Button>
+          </>
         )}
-        <Button
-          variant="secondary"
-          block
-          loading={busy}
-          disabled={busy || staked === 0n}
-          onClick={handleUnstake}
-        >
-          Unstake
-        </Button>
-        <Button
-          variant="secondary"
-          block
-          loading={busy}
-          disabled={busy || pendingWei === 0n}
-          onClick={handleClaim}
-        >
-          Claim rewards
-        </Button>
-        <Button variant="ghost" block onClick={onBack} disabled={busy}>
+        <Button variant="ghost" block onClick={onBack} disabled={busy && canAct}>
           Back to profile
         </Button>
       </div>

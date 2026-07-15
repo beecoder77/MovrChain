@@ -1,21 +1,30 @@
 import { useEffect, useRef, useState } from "react";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { monadTestnet } from "viem/chains";
+import { zeroAddress } from "viem";
 import { Alert, Button } from "../design-system/components";
 import { formatWalletError } from "../lib/errors";
 import { EXPLORER_URL } from "../lib/wagmi";
 import {
   AVATARS,
   MAX_BIO_LEN,
+  MAX_HANDLE_LEN,
   MAX_NAME_LEN,
   PROFILE_ABI,
   PROFILE_ADDRESS,
   SET_PROFILE_GAS,
+  validateHandleInput,
+  normalizeHandle,
 } from "../lib/profile";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
 
 type EditProfileScreenProps = {
+  /** Must be the connected wallet — setProfile always writes msg.sender */
   address: `0x${string}`;
   onBack: () => void;
   onSaved: () => void;
@@ -31,26 +40,49 @@ export function EditProfileScreen({
 
   const { profile: chainProfile, isLoading, refetch } = useRunnerProfile(address);
 
+  const [handle, setHandle] = useState("");
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [avatarId, setAvatarId] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Fill form from on-chain profile once the first getProfile completes
   useEffect(() => {
     if (isLoading || hydrated) return;
     if (chainProfile.exists) {
+      setHandle(chainProfile.handle);
       setName(chainProfile.name);
       setBio(chainProfile.bio);
       setAvatarId(chainProfile.avatarId);
     } else {
+      setHandle("");
       setName("");
       setBio("");
       setAvatarId(0);
     }
     setHydrated(true);
   }, [chainProfile, isLoading, hydrated]);
+
+  const normalizedPreview = normalizeHandle(handle);
+  const handleError = handle.trim() ? validateHandleInput(handle) : "Add a unique handle.";
+
+  const { data: resolvedOwner } = useReadContract({
+    address: PROFILE_ADDRESS,
+    abi: PROFILE_ABI,
+    functionName: "resolveHandle",
+    args: normalizedPreview ? [normalizedPreview] : undefined,
+    chainId: monadTestnet.id,
+    query: {
+      enabled: Boolean(normalizedPreview),
+      staleTime: 4_000,
+    },
+  });
+
+  const handleTaken =
+    Boolean(normalizedPreview) &&
+    typeof resolvedOwner === "string" &&
+    resolvedOwner !== zeroAddress &&
+    resolvedOwner.toLowerCase() !== address.toLowerCase();
 
   const { writeContract, data: txHash, isPending, error: writeError, reset } =
     useWriteContract();
@@ -71,7 +103,7 @@ export function EditProfileScreen({
 
     if (receipt.status === "reverted") {
       setLocalError(
-        "Transaction reverted on Monad (often out of gas). Try again.",
+        "Transaction reverted on Monad (handle taken or invalid). Try again.",
       );
       return;
     }
@@ -93,12 +125,29 @@ export function EditProfileScreen({
   const busy = isPending || confirming;
   const nameOk = name.trim().length > 0 && name.trim().length <= MAX_NAME_LEN;
   const bioOk = bio.length <= MAX_BIO_LEN;
-  const canSave = nameOk && bioOk && !busy && hydrated;
+  const handleOk = !handleError && !handleTaken;
+  const canSave = nameOk && bioOk && handleOk && !busy && hydrated;
 
   const handleSave = () => {
     setLocalError(null);
     handledTx.current = null;
     reset();
+
+    const handleMsg = validateHandleInput(handle);
+    if (handleMsg) {
+      setLocalError(handleMsg);
+      return;
+    }
+    const normalized = normalizeHandle(handle);
+    if (!normalized) {
+      setLocalError("Invalid handle.");
+      return;
+    }
+    if (handleTaken) {
+      setLocalError("That handle is already taken.");
+      return;
+    }
+
     const trimmed = name.trim();
     if (!trimmed) {
       setLocalError("Add a display name.");
@@ -113,11 +162,12 @@ export function EditProfileScreen({
       return;
     }
 
+    // Always writes msg.sender — never pass another wallet's address into setProfile
     writeContract({
       address: PROFILE_ADDRESS,
       abi: PROFILE_ABI,
       functionName: "setProfile",
-      args: [trimmed, bio, avatarId],
+      args: [normalized, trimmed, bio, avatarId],
       chainId: monadTestnet.id,
       gas: SET_PROFILE_GAS,
     });
@@ -138,8 +188,8 @@ export function EditProfileScreen({
       </header>
 
       <p className="edit-profile__lead">
-        Choose an athletic avatar, then save your name and bio on Monad. Gas
-        only — no fee.
+        Pick a unique handle, athletic avatar, and display name. Saved on Monad
+        for your wallet only — gas only, no fee.
       </p>
 
       {isLoading && !hydrated && (
@@ -195,6 +245,33 @@ export function EditProfileScreen({
           ))}
         </div>
       </fieldset>
+
+      <label className="edit-profile__field">
+        <span className="edit-profile__label">Handle</span>
+        <div className="edit-profile__handle-row">
+          <span className="edit-profile__handle-prefix" aria-hidden>
+            @
+          </span>
+          <input
+            className="edit-profile__input edit-profile__input--handle"
+            type="text"
+            value={handle}
+            maxLength={MAX_HANDLE_LEN}
+            autoComplete="username"
+            spellCheck={false}
+            disabled={busy || !hydrated}
+            placeholder="yourhandle"
+            onChange={(e) => setHandle(e.target.value.replace(/\s/g, ""))}
+          />
+        </div>
+        <span className="edit-profile__hint">
+          {normalizedPreview
+            ? handleTaken
+              ? "Taken — pick another"
+              : `${normalizedPreview.length}/${MAX_HANDLE_LEN} · unique on Monad`
+            : `3–${MAX_HANDLE_LEN} chars · letters, numbers, _`}
+        </span>
+      </label>
 
       <label className="edit-profile__field">
         <span className="edit-profile__label">Display name</span>

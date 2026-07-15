@@ -1,9 +1,8 @@
-import { useDisconnect, useReadContract, useReadContracts } from "wagmi";
+import { useReadContracts } from "wagmi";
 import { monadTestnet } from "viem/chains";
 import type { AchievementDef, RunPost } from "../lib/posts";
 import {
   ACHIEVEMENTS,
-  computeAchievements,
   formatAddress,
   formatDistance,
   formatDuration,
@@ -13,22 +12,22 @@ import {
 import {
   ACHIEVEMENT_NFT_ABI,
   claimStatus,
-  formatBoostBps,
-  formatMovr,
   NFT_CONTRACT,
-  STAKING_ABI,
-  STAKING_CONTRACT,
 } from "../lib/achievements";
-import { avatarSrc, displayName, formatHandle } from "../lib/profile";
+import {
+  avatarSrc,
+  displayName,
+  formatHandle,
+} from "../lib/profile";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
-import { Button, WalletChip } from "../design-system/components";
+import { Button } from "../design-system/components";
 
-type ProfileScreenProps = {
-  address: `0x${string}`;
+type PublicProfileScreenProps = {
+  /** Runner being viewed — never used for writes */
+  subjectAddress: `0x${string}`;
   posts: RunPost[];
-  onLogRun: () => void;
-  onEditProfile: () => void;
-  onOpenStaking: () => void;
+  loadingPosts?: boolean;
+  onBack: () => void;
   onOpenAchievement: (achievement: AchievementDef) => void;
 };
 
@@ -45,17 +44,17 @@ function AchievementCard({
     status === "claimed"
       ? "Claimed"
       : status === "claimable"
-        ? "Claim NFT"
+        ? "In progress"
         : "Locked";
 
   return (
     <button
       type="button"
       className={`achievement-card achievement-card--button${
-        status !== "locked" ? " achievement-card--unlocked" : ""
-      }${status === "claimable" ? " achievement-card--claimable" : ""}`}
+        status === "claimed" ? " achievement-card--unlocked" : ""
+      }`}
       onClick={onOpen}
-      aria-label={`${achievement.title}, ${label}. Open detail`}
+      aria-label={`${achievement.title}, ${label}. View detail`}
     >
       <img
         className="achievement-card__art"
@@ -74,50 +73,25 @@ function AchievementCard({
   );
 }
 
-export function ProfileScreen({
-  address,
+/**
+ * Read-only profile of another runner.
+ * No edit, staking, or claim actions — subjectAddress is display/query only.
+ */
+export function PublicProfileScreen({
+  subjectAddress,
   posts,
-  onLogRun,
-  onEditProfile,
-  onOpenStaking,
+  loadingPosts,
+  onBack,
   onOpenAchievement,
-}: ProfileScreenProps) {
-  const { disconnect } = useDisconnect();
-  const { profile, isLoading } = useRunnerProfile(address);
-
+}: PublicProfileScreenProps) {
+  const { profile, isLoading } = useRunnerProfile(subjectAddress);
   const stats = getProfileStats(posts);
-  const localAchievements = computeAchievements(posts);
-  const unlockedLocal = localAchievements.filter((a) => a.unlocked).length;
   const hasRuns = posts.length > 0;
   const name =
-    isLoading && !profile.exists ? "Loading…" : displayName(profile, address);
+    isLoading && !profile.exists
+      ? "Loading…"
+      : displayName(profile, subjectAddress);
   const handleLabel = profile.exists ? formatHandle(profile.handle) : "";
-
-  const { data: stakeRaw } = useReadContract({
-    address: STAKING_CONTRACT,
-    abi: STAKING_ABI,
-    functionName: "stakes",
-    args: [address],
-    chainId: monadTestnet.id,
-    query: { staleTime: 8_000, refetchOnMount: "always" },
-  });
-
-  const { data: pending } = useReadContract({
-    address: STAKING_CONTRACT,
-    abi: STAKING_ABI,
-    functionName: "pendingReward",
-    args: [address],
-    chainId: monadTestnet.id,
-    query: { staleTime: 8_000, refetchOnMount: "always" },
-  });
-
-  const { data: boostBps } = useReadContract({
-    address: STAKING_CONTRACT,
-    abi: STAKING_ABI,
-    functionName: "boostBpsOf",
-    args: [address],
-    chainId: monadTestnet.id,
-  });
 
   const claimReads = useReadContracts({
     contracts: ACHIEVEMENTS.flatMap((a) => [
@@ -125,26 +99,19 @@ export function ProfileScreen({
         address: NFT_CONTRACT,
         abi: ACHIEVEMENT_NFT_ABI,
         functionName: "hasClaimed" as const,
-        args: [address, BigInt(a.chainId)] as const,
+        args: [subjectAddress, BigInt(a.chainId)] as const,
         chainId: monadTestnet.id,
       },
       {
         address: NFT_CONTRACT,
         abi: ACHIEVEMENT_NFT_ABI,
         functionName: "eligible" as const,
-        args: [address, BigInt(a.chainId)] as const,
+        args: [subjectAddress, BigInt(a.chainId)] as const,
         chainId: monadTestnet.id,
       },
     ]),
     query: { staleTime: 8_000, refetchOnMount: "always" },
   });
-
-  const staked =
-    stakeRaw && Array.isArray(stakeRaw)
-      ? (stakeRaw[0] as bigint)
-      : 0n;
-  const pendingWei = (pending as bigint | undefined) ?? 0n;
-  const boost = Number(boostBps ?? 0n);
 
   const claimedCount = ACHIEVEMENTS.filter((_, i) => {
     const row = claimReads.data?.[i * 2];
@@ -152,12 +119,14 @@ export function ProfileScreen({
   }).length;
 
   return (
-    <section className="profile-screen" aria-labelledby="profile-heading">
-      <header className="profile-screen__header">
-        <h1 id="profile-heading" className="profile-screen__heading">
-          Profile
+    <section className="profile-screen public-profile" aria-labelledby="public-profile-heading">
+      <header className="profile-screen__header public-profile__header">
+        <Button variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+        <h1 id="public-profile-heading" className="profile-screen__heading">
+          Runner
         </h1>
-        <WalletChip address={address} connected />
       </header>
 
       <div className="profile-screen__identity">
@@ -173,30 +142,30 @@ export function ProfileScreen({
           {handleLabel ? (
             <p className="profile-screen__handle">{handleLabel}</p>
           ) : null}
-          <p className="profile-screen__address">{formatAddress(address)}</p>
+          <p className="profile-screen__address">{formatAddress(subjectAddress)}</p>
           {profile.exists && profile.bio ? (
             <p className="profile-screen__bio">{profile.bio}</p>
           ) : (
             <p className="profile-screen__bio profile-screen__bio--empty">
-              {isLoading
-                ? "Loading profile from Monad…"
-                : "Add a bio so the feed knows who\u2019s logging miles."}
+              {isLoading ? "Loading profile from Monad…" : "No bio yet."}
             </p>
           )}
         </div>
       </div>
 
-      <Button variant="secondary" block onClick={onEditProfile}>
-        {profile.exists ? "Edit profile" : "Set up profile"}
-      </Button>
-
-      {!hasRuns && (
+      {!hasRuns && !loadingPosts && (
         <div className="profile-screen__empty">
-          <p className="profile-screen__empty-title">No verified runs yet</p>
+          <p className="profile-screen__empty-title">No public runs yet</p>
           <p className="profile-screen__empty-body">
-            Log a GPX to unlock stats and achievements on your profile.
+            This runner hasn&apos;t published verified runs to the community feed.
           </p>
         </div>
+      )}
+
+      {loadingPosts && !hasRuns && (
+        <p className="profile-screen__bio profile-screen__bio--empty">
+          Loading runs…
+        </p>
       )}
 
       <div className="profile-screen__stats" aria-label="Lifetime stats">
@@ -227,55 +196,18 @@ export function ProfileScreen({
       </div>
 
       <section
-        className="profile-screen__staking"
-        aria-labelledby="staking-heading"
-      >
-        <div className="profile-screen__section-head">
-          <h2 id="staking-heading" className="profile-screen__section-title">
-            Staking
-          </h2>
-          <span className="profile-screen__section-meta">
-            {formatBoostBps(boost)} boost
-          </span>
-        </div>
-        <button
-          type="button"
-          className="staking-card"
-          onClick={onOpenStaking}
-          aria-label="Open staking detail"
-        >
-          <div className="staking-card__row">
-            <span className="staking-card__label">Staked</span>
-            <span className="staking-card__value">
-              {formatMovr(staked)} MOVR
-            </span>
-          </div>
-          <div className="staking-card__row">
-            <span className="staking-card__label">Pending</span>
-            <span className="staking-card__value">
-              {formatMovr(pendingWei)} MOVR
-            </span>
-          </div>
-          <div className="staking-card__cta">View staking detail</div>
-        </button>
-      </section>
-
-      <section
         className="profile-screen__achievements"
-        aria-labelledby="achievements-heading"
+        aria-labelledby="public-achievements-heading"
       >
         <div className="profile-screen__section-head">
           <h2
-            id="achievements-heading"
+            id="public-achievements-heading"
             className="profile-screen__section-title"
           >
             Achievements
           </h2>
           <span className="profile-screen__section-meta">
             {claimedCount}/{ACHIEVEMENTS.length} NFTs
-            {unlockedLocal > claimedCount
-              ? ` · ${unlockedLocal} local`
-              : ""}
           </span>
         </div>
         <div className="profile-screen__achievement-grid">
@@ -298,15 +230,6 @@ export function ProfileScreen({
           })}
         </div>
       </section>
-
-      <div className="profile-screen__actions">
-        <Button block onClick={onLogRun}>
-          {hasRuns ? "Log a new run" : "Log your first run"}
-        </Button>
-        <Button variant="ghost" block onClick={() => disconnect()}>
-          Disconnect wallet
-        </Button>
-      </div>
     </section>
   );
 }

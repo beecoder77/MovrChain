@@ -7,6 +7,7 @@ export type AvatarDef = {
 };
 
 export type OnChainProfile = {
+  handle: string;
   name: string;
   bio: string;
   avatarId: number;

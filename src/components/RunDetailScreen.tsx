@@ -19,6 +19,7 @@ type RunDetailScreenProps = {
   liveRun?: ParsedRun | null;
   isOwn?: boolean;
   onBack: () => void;
+  onOpenProfile?: (address: `0x${string}`) => void;
 };
 
 export function RunDetailScreen({
@@ -26,6 +27,7 @@ export function RunDetailScreen({
   liveRun,
   isOwn,
   onBack,
+  onOpenProfile,
 }: RunDetailScreenProps) {
   const { profile } = useRunnerProfile(post.address as `0x${string}`);
   const stored = getRoutePoints(post.runHash);
@@ -46,19 +48,44 @@ export function RunDetailScreen({
     <section className="detail-screen" aria-label="Run detail">
       <div className="detail-screen__hero">
         <div className="detail-screen__identity">
-          <img
-            className="detail-screen__avatar"
-            src={avatarSrc(profile.exists ? profile.avatarId : 0)}
-            alt=""
-            width={40}
-            height={40}
-          />
-          <div>
-            <p className="detail-screen__runner">{runnerLabel}</p>
-            <time className="detail-screen__time" dateTime={post.verifiedAt}>
-              {formatTimeAgo(post.verifiedAt) || "Recently"}
-            </time>
-          </div>
+          {onOpenProfile ? (
+            <button
+              type="button"
+              className="detail-screen__identity-btn"
+              onClick={() => onOpenProfile(post.address as `0x${string}`)}
+              aria-label={`Open profile: ${runnerLabel}`}
+            >
+              <img
+                className="detail-screen__avatar"
+                src={avatarSrc(profile.exists ? profile.avatarId : 0)}
+                alt=""
+                width={40}
+                height={40}
+              />
+              <div>
+                <p className="detail-screen__runner">{runnerLabel}</p>
+                <time className="detail-screen__time" dateTime={post.verifiedAt}>
+                  {formatTimeAgo(post.verifiedAt) || "Recently"}
+                </time>
+              </div>
+            </button>
+          ) : (
+            <>
+              <img
+                className="detail-screen__avatar"
+                src={avatarSrc(profile.exists ? profile.avatarId : 0)}
+                alt=""
+                width={40}
+                height={40}
+              />
+              <div>
+                <p className="detail-screen__runner">{runnerLabel}</p>
+                <time className="detail-screen__time" dateTime={post.verifiedAt}>
+                  {formatTimeAgo(post.verifiedAt) || "Recently"}
+                </time>
+              </div>
+            </>
+          )}
         </div>
         <h1 className="detail-screen__title">{post.runName}</h1>
         <StatHero

@@ -21,18 +21,28 @@ import { formatWalletError } from "../lib/errors";
 import { Alert, Button } from "../design-system/components";
 
 type AchievementDetailScreenProps = {
+  /** Subject whose achievement we display (read-only when viewOnly) */
   address: `0x${string}`;
+  /** Connected wallet — claims only when it matches address */
+  viewerAddress: `0x${string}`;
   achievement: AchievementDef;
+  /** Force read-only (public profile). Also enforced when viewer ≠ subject. */
+  viewOnly?: boolean;
   onBack: () => void;
 };
 
 export function AchievementDetailScreen({
   address,
+  viewerAddress,
   achievement,
+  viewOnly = false,
   onBack,
 }: AchievementDetailScreenProps) {
   const [warning, setWarning] = useState<string | null>(null);
   const chainId = BigInt(achievement.chainId);
+  const canClaim =
+    !viewOnly &&
+    viewerAddress.toLowerCase() === address.toLowerCase();
 
   const { data: statsRaw, refetch: refetchStats } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -109,6 +119,10 @@ export function AchievementDetailScreen({
   ]);
 
   const handleClaim = () => {
+    if (!canClaim) {
+      setWarning("You can only claim achievements for your own wallet.");
+      return;
+    }
     setWarning(null);
     reset();
     writeContract({
@@ -125,7 +139,9 @@ export function AchievementDetailScreen({
     status === "claimed"
       ? "NFT claimed"
       : status === "claimable"
-        ? "Ready to claim NFT"
+        ? canClaim
+          ? "Ready to claim NFT"
+          : "Eligible (owner can claim)"
         : "Locked — keep running";
 
   return (
@@ -174,8 +190,9 @@ export function AchievementDetailScreen({
           </div>
         </dl>
         <p className="achieve-detail__hint">
-          Eligibility uses attested Monad stats — import and verify runs so the
-          claim unlocks.
+          {canClaim
+            ? "Eligibility uses attested Monad stats — import and verify runs so the claim unlocks."
+            : "View only — achievement NFTs can only be claimed by this runner’s connected wallet."}
         </p>
       </div>
 
@@ -185,14 +202,14 @@ export function AchievementDetailScreen({
         </Alert>
       )}
 
-      {isSuccess && !receiptReverted && status === "claimed" && (
+      {isSuccess && !receiptReverted && status === "claimed" && canClaim && (
         <Alert className="ds-alert--footer-spaced">
           Achievement NFT minted to your wallet.
         </Alert>
       )}
 
       <div className="achieve-detail__actions">
-        {status === "claimable" && (
+        {canClaim && status === "claimable" && (
           <Button block loading={busy} disabled={busy} onClick={handleClaim}>
             {busy ? "Claiming NFT…" : "Claim achievement NFT"}
           </Button>
@@ -202,12 +219,17 @@ export function AchievementDetailScreen({
             NFT owned
           </Button>
         )}
-        {status === "locked" && (
+        {canClaim && status === "locked" && (
           <Button block disabled>
             Not eligible yet
           </Button>
         )}
-        <Button variant="ghost" block onClick={onBack} disabled={busy}>
+        {!canClaim && status !== "claimed" && (
+          <Button block disabled>
+            View only
+          </Button>
+        )}
+        <Button variant="ghost" block onClick={onBack} disabled={busy && canClaim}>
           Back to profile
         </Button>
       </div>

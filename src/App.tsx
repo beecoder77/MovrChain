@@ -8,6 +8,7 @@ import { AppShell, WalletChip } from "./design-system/components";
 import { ConnectScreen } from "./components/ConnectScreen";
 import { FeedScreen } from "./components/FeedScreen";
 import { ProfileScreen } from "./components/ProfileScreen";
+import { PublicProfileScreen } from "./components/PublicProfileScreen";
 import { EditProfileScreen } from "./components/EditProfileScreen";
 import { BottomNav, type MainTab } from "./components/BottomNav";
 import { GpxUpload } from "./components/GpxUpload";
@@ -19,6 +20,13 @@ import { StakingDetailScreen } from "./components/StakingDetailScreen";
 import { AchievementDetailScreen } from "./components/AchievementDetailScreen";
 
 export type LogStep = "upload" | "replay" | "summary" | "verify";
+
+type AchievementView = {
+  achievement: AchievementDef;
+  /** Wallet whose achievement we display */
+  subject: `0x${string}`;
+  viewOnly: boolean;
+};
 
 const LOG_LABELS: Record<LogStep, string> = {
   upload: "Import",
@@ -34,8 +42,12 @@ export default function App() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [detailPost, setDetailPost] = useState<RunPost | null>(null);
   const [stakingOpen, setStakingOpen] = useState(false);
-  const [achievementDetail, setAchievementDetail] =
-    useState<AchievementDef | null>(null);
+  const [achievementView, setAchievementView] =
+    useState<AchievementView | null>(null);
+  /** Other runner overlay — never used for write actions */
+  const [viewedProfile, setViewedProfile] = useState<`0x${string}` | null>(
+    null,
+  );
   const [run, setRun] = useState<ParsedRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +66,11 @@ export default function App() {
     isLoading: communityLoading,
     refetch: refetchCommunity,
   } = useCommunityFeed(feedVersion);
+
+  const {
+    posts: viewedPosts,
+    isLoading: viewedLoading,
+  } = usePersonalFeed(viewedProfile ?? undefined, feedVersion);
 
   const localPersonal = useMemo(
     () => (address ? getPostsForAddress(address) : []),
@@ -110,7 +127,8 @@ export default function App() {
     setEditingProfile(false);
     setDetailPost(null);
     setStakingOpen(false);
-    setAchievementDetail(null);
+    setAchievementView(null);
+    setViewedProfile(null);
     setTab("feed");
   }, []);
 
@@ -125,6 +143,26 @@ export default function App() {
     setRun(null);
     setError(null);
   }, []);
+
+  const openRunnerProfile = useCallback(
+    (runner: `0x${string}`) => {
+      if (address && runner.toLowerCase() === address.toLowerCase()) {
+        setViewedProfile(null);
+        setDetailPost(null);
+        setAchievementView(null);
+        setStakingOpen(false);
+        setEditingProfile(false);
+        setTab("profile");
+        return;
+      }
+      setDetailPost(null);
+      setAchievementView(null);
+      setStakingOpen(false);
+      setEditingProfile(false);
+      setViewedProfile(runner);
+    },
+    [address],
+  );
 
   const handleVerified = useCallback(
     (txHash?: string): boolean => {
@@ -186,6 +224,7 @@ export default function App() {
     );
   }
 
+  // Own-wallet writes only — never open edit/stake with a third-party address
   if (editingProfile) {
     return (
       <AppShell
@@ -215,13 +254,14 @@ export default function App() {
       >
         <StakingDetailScreen
           address={address}
+          viewerAddress={address}
           onBack={() => setStakingOpen(false)}
         />
       </AppShell>
     );
   }
 
-  if (achievementDetail) {
+  if (achievementView) {
     return (
       <AppShell
         brand="MovrChain"
@@ -229,9 +269,35 @@ export default function App() {
         onBrandClick={goToFeed}
       >
         <AchievementDetailScreen
-          address={address}
-          achievement={achievementDetail}
-          onBack={() => setAchievementDetail(null)}
+          address={achievementView.subject}
+          viewerAddress={address}
+          achievement={achievementView.achievement}
+          viewOnly={achievementView.viewOnly}
+          onBack={() => setAchievementView(null)}
+        />
+      </AppShell>
+    );
+  }
+
+  if (viewedProfile) {
+    return (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+      >
+        <PublicProfileScreen
+          subjectAddress={viewedProfile}
+          posts={viewedPosts}
+          loadingPosts={viewedLoading}
+          onBack={() => setViewedProfile(null)}
+          onOpenAchievement={(achievement) =>
+            setAchievementView({
+              achievement,
+              subject: viewedProfile,
+              viewOnly: true,
+            })
+          }
         />
       </AppShell>
     );
@@ -250,6 +316,7 @@ export default function App() {
           post={detailPost}
           isOwn={isOwn}
           onBack={() => setDetailPost(null)}
+          onOpenProfile={openRunnerProfile}
         />
       </AppShell>
     );
@@ -272,6 +339,7 @@ export default function App() {
           loading={personalLoading || communityLoading}
           onLogRun={startLogRun}
           onOpenPost={setDetailPost}
+          onOpenProfile={openRunnerProfile}
         />
       )}
       {tab === "profile" && (
@@ -281,7 +349,13 @@ export default function App() {
           onLogRun={startLogRun}
           onEditProfile={() => setEditingProfile(true)}
           onOpenStaking={() => setStakingOpen(true)}
-          onOpenAchievement={setAchievementDetail}
+          onOpenAchievement={(achievement) =>
+            setAchievementView({
+              achievement,
+              subject: address,
+              viewOnly: false,
+            })
+          }
         />
       )}
     </AppShell>

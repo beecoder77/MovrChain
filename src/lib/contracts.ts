@@ -13,10 +13,10 @@ export const ATTESTATION_ADDRESS =
   env("VITE_CONTRACT_ADDRESS") ??
   ("0xae2Cbd400FA8ef5be2F0c52cF21263A1D95C58cB" as const);
 
-/** MovrProfile — name, bio, avatar (per connected wallet) */
+/** MovrProfile — unique handle, name, bio, avatar (per connected wallet) */
 export const PROFILE_ADDRESS =
   env("VITE_PROFILE_ADDRESS") ??
-  ("0xa16938B26824c3D2aACEb4e25a08937B7fCb202c" as const);
+  ("0x9A2AE847Ad36B8A64aa82156331Bd8648A3De31A" as const);
 
 export const MOVR_TOKEN_ADDRESS =
   env("VITE_MOVR_TOKEN") ??
