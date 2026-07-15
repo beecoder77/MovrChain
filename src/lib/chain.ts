@@ -77,6 +77,20 @@ export const MOVR_CHAIN_ABI = [
     stateMutability: "view",
   },
   {
+    type: "function",
+    name: "runnerStats",
+    inputs: [{ name: "runner", type: "address" }],
+    outputs: [
+      { name: "totalDistanceMeters", type: "uint256" },
+      { name: "runCount", type: "uint256" },
+      { name: "bestSingleRunMeters", type: "uint256" },
+      { name: "currentStreakDays", type: "uint256" },
+      { name: "longestStreakDays", type: "uint256" },
+      { name: "lastRunDay", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
     type: "event",
     name: "RunAttested",
     inputs: [

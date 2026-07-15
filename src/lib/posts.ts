@@ -30,6 +30,8 @@ export type AchievementDef = {
   image: string;
   criterion: AchievementCriterion;
   threshold: number;
+  /** Basis points added to staking reward rate when NFT claimed */
+  stakingBoostBps: number;
 };
 
 export type Achievement = AchievementDef & {
@@ -49,6 +51,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/1k.svg",
     criterion: "single_run_meters",
     threshold: 1000,
+    stakingBoostBps: 300,
   },
   {
     id: "5k",
@@ -58,6 +61,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/5k.svg",
     criterion: "single_run_meters",
     threshold: 5000,
+    stakingBoostBps: 500,
   },
   {
     id: "10k",
@@ -67,6 +71,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/10k.svg",
     criterion: "single_run_meters",
     threshold: 10000,
+    stakingBoostBps: 800,
   },
   {
     id: "half",
@@ -76,6 +81,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/half.svg",
     criterion: "single_run_meters",
     threshold: 21098,
+    stakingBoostBps: 1200,
   },
   {
     id: "marathon",
@@ -85,6 +91,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/marathon.svg",
     criterion: "single_run_meters",
     threshold: 42195,
+    stakingBoostBps: 2000,
   },
   {
     id: "streak-7",
@@ -94,6 +101,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/streak-7.svg",
     criterion: "streak_days",
     threshold: 7,
+    stakingBoostBps: 700,
   },
   {
     id: "streak-14",
@@ -103,6 +111,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/streak-14.svg",
     criterion: "streak_days",
     threshold: 14,
+    stakingBoostBps: 1200,
   },
   {
     id: "streak-30",
@@ -112,6 +121,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/streak-30.svg",
     criterion: "streak_days",
     threshold: 30,
+    stakingBoostBps: 2000,
   },
   {
     id: "total-10k",
@@ -121,6 +131,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/total-10k.svg",
     criterion: "total_distance_meters",
     threshold: 10000,
+    stakingBoostBps: 400,
   },
   {
     id: "century",
@@ -130,6 +141,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     image: "/brand/achievements/century.svg",
     criterion: "total_distance_meters",
     threshold: 100000,
+    stakingBoostBps: 1500,
   },
 ];
 

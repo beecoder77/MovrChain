@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import type { ParsedRun } from "./lib/gpx";
 import { parseGpx } from "./lib/gpx";
-import { addVerifiedPost, getPostsForAddress, type RunPost } from "./lib/posts";
+import { addVerifiedPost, getPostsForAddress, type AchievementDef, type RunPost } from "./lib/posts";
 import { useCommunityFeed, usePersonalFeed } from "./lib/feed";
 import { AppShell, WalletChip } from "./design-system/components";
 import { ConnectScreen } from "./components/ConnectScreen";
@@ -15,6 +15,8 @@ import { RunReplay } from "./components/RunReplay";
 import { RunSummary } from "./components/RunSummary";
 import { VerifyClaim } from "./components/VerifyClaim";
 import { RunDetailScreen } from "./components/RunDetailScreen";
+import { StakingDetailScreen } from "./components/StakingDetailScreen";
+import { AchievementDetailScreen } from "./components/AchievementDetailScreen";
 
 export type LogStep = "upload" | "replay" | "summary" | "verify";
 
@@ -31,6 +33,9 @@ export default function App() {
   const [logStep, setLogStep] = useState<LogStep | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [detailPost, setDetailPost] = useState<RunPost | null>(null);
+  const [stakingOpen, setStakingOpen] = useState(false);
+  const [achievementDetail, setAchievementDetail] =
+    useState<AchievementDef | null>(null);
   const [run, setRun] = useState<ParsedRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,6 +109,8 @@ export default function App() {
     setError(null);
     setEditingProfile(false);
     setDetailPost(null);
+    setStakingOpen(false);
+    setAchievementDetail(null);
     setTab("feed");
   }, []);
 
@@ -199,6 +206,37 @@ export default function App() {
     );
   }
 
+  if (stakingOpen) {
+    return (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+      >
+        <StakingDetailScreen
+          address={address}
+          onBack={() => setStakingOpen(false)}
+        />
+      </AppShell>
+    );
+  }
+
+  if (achievementDetail) {
+    return (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+      >
+        <AchievementDetailScreen
+          address={address}
+          achievement={achievementDetail}
+          onBack={() => setAchievementDetail(null)}
+        />
+      </AppShell>
+    );
+  }
+
   if (detailPost) {
     const isOwn =
       detailPost.address.toLowerCase() === address.toLowerCase();
@@ -242,6 +280,8 @@ export default function App() {
           posts={yourPosts}
           onLogRun={startLogRun}
           onEditProfile={() => setEditingProfile(true)}
+          onOpenStaking={() => setStakingOpen(true)}
+          onOpenAchievement={setAchievementDetail}
         />
       )}
     </AppShell>
