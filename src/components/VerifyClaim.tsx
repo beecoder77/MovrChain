@@ -32,6 +32,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useReadContract,
+  usePublicClient,
 } from "wagmi";
 import { monadTestnet } from "viem/chains";
 
@@ -43,10 +44,20 @@ type VerifyClaimProps = {
 
 type PipelineStepId = "parsed" | "attested" | "published" | "reward";
 
-/** Monad gas estimates run low; publish stores a string + several slots (~208k on Anvil). */
-const ATTEST_GAS = 300_000n;
-const PUBLISH_GAS = 600_000n;
-const CLAIM_GAS = 350_000n;
+/**
+ * Gas LIMIT is a ceiling: you pay for gas USED, unused units are refunded.
+ * Monad eth_estimateGas often undercounts heavy storage (feed string + array push),
+ * so we estimate then multiply, with floors so cold SSTORE never OOGs.
+ */
+const GAS_BUFFER_BPS = 200n; // 2.00× estimate
+const ATTEST_GAS_FLOOR = 350_000n;
+const PUBLISH_GAS_FLOOR = 800_000n;
+const CLAIM_GAS_FLOOR = 400_000n;
+
+function bufferedGas(estimate: bigint, floor: bigint): bigint {
+  const bumped = (estimate * GAS_BUFFER_BPS) / 100n;
+  return bumped > floor ? bumped : floor;
+}
 
 export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
   const runHash = computeRunHash(run);
@@ -55,6 +66,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
   const rewardLabel = rewardLabelForDistance(run.totalDistanceMeters);
   const mapPoints = downsamplePoints(run.points, 200);
   const { address } = useAccount();
+  const publicClient = usePublicClient({ chainId: monadTestnet.id });
 
   // Keep map available for feed detail after attest
   useEffect(() => {
@@ -274,16 +286,32 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
     setWarning(msg.slice(0, 180));
   }, [claimFailed, claimWriteError, claimReceiptError]);
 
-  const startPublish = () => {
+  const startPublish = async () => {
     if (!FEED_CONTRACT_ADDRESS || !address) return;
     setWarning(null);
+    let gas = PUBLISH_GAS_FLOOR;
+    try {
+      if (publicClient) {
+        const estimated = await publicClient.estimateContractGas({
+          address: FEED_CONTRACT_ADDRESS,
+          abi: FEED_ABI,
+          functionName: "publish",
+          args: [runHash, runName],
+          account: address,
+        });
+        gas = bufferedGas(estimated, PUBLISH_GAS_FLOOR);
+      }
+    } catch {
+      // Fall back to floor when estimate fails (common on flaky RPC)
+      gas = PUBLISH_GAS_FLOOR;
+    }
     writePublish({
       address: FEED_CONTRACT_ADDRESS,
       abi: FEED_ABI,
       functionName: "publish",
       args: [runHash, runName],
       chainId: monadTestnet.id,
-      gas: PUBLISH_GAS,
+      gas,
     });
   };
 
@@ -306,7 +334,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
       return;
     }
     autoPublishTried.current = true;
-    startPublish();
+    void startPublish();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- start once
   }, [
     verified,
@@ -328,14 +356,31 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
       return;
     }
     autoClaimTried.current = true;
-    writeClaim({
-      address: REWARD_CONTRACT_ADDRESS,
-      abi: MILESTONE_REWARD_ABI,
-      functionName: "claim",
-      args: [runHash],
-      chainId: monadTestnet.id,
-      gas: CLAIM_GAS,
-    });
+    void (async () => {
+      let gas = CLAIM_GAS_FLOOR;
+      try {
+        if (publicClient && REWARD_CONTRACT_ADDRESS) {
+          const estimated = await publicClient.estimateContractGas({
+            address: REWARD_CONTRACT_ADDRESS,
+            abi: MILESTONE_REWARD_ABI,
+            functionName: "claim",
+            args: [runHash],
+            account: address,
+          });
+          gas = bufferedGas(estimated, CLAIM_GAS_FLOOR);
+        }
+      } catch {
+        gas = CLAIM_GAS_FLOOR;
+      }
+      writeClaim({
+        address: REWARD_CONTRACT_ADDRESS,
+        abi: MILESTONE_REWARD_ABI,
+        functionName: "claim",
+        args: [runHash],
+        chainId: monadTestnet.id,
+        gas,
+      });
+    })();
   }, [
     published,
     milestone,
@@ -344,6 +389,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
     address,
     runHash,
     writeClaim,
+    publicClient,
   ]);
 
   // Finish → save local cache + go to Your Run Feed
@@ -394,18 +440,39 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
       return;
     }
 
-    writeAttest({
-      address: CONTRACT_ADDRESS,
-      abi: MOVR_CHAIN_ABI,
-      functionName: "attestRun",
-      args: [
-        runHash,
-        BigInt(Math.round(run.totalDistanceMeters)),
-        BigInt(run.durationSeconds),
-      ],
-      chainId: monadTestnet.id,
-      gas: ATTEST_GAS,
-    });
+    void (async () => {
+      let gas = ATTEST_GAS_FLOOR;
+      try {
+        if (publicClient) {
+          const estimated = await publicClient.estimateContractGas({
+            address: CONTRACT_ADDRESS,
+            abi: MOVR_CHAIN_ABI,
+            functionName: "attestRun",
+            args: [
+              runHash,
+              BigInt(Math.round(run.totalDistanceMeters)),
+              BigInt(run.durationSeconds),
+            ],
+            account: address,
+          });
+          gas = bufferedGas(estimated, ATTEST_GAS_FLOOR);
+        }
+      } catch {
+        gas = ATTEST_GAS_FLOOR;
+      }
+      writeAttest({
+        address: CONTRACT_ADDRESS,
+        abi: MOVR_CHAIN_ABI,
+        functionName: "attestRun",
+        args: [
+          runHash,
+          BigInt(Math.round(run.totalDistanceMeters)),
+          BigInt(run.durationSeconds),
+        ],
+        chainId: monadTestnet.id,
+        gas,
+      });
+    })();
   };
 
   let activeStep: PipelineStepId = "parsed";
@@ -523,16 +590,33 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
               else if (!published) {
                 autoPublishTried.current = false;
                 startPublish();
-              } else if (milestone && !movrClaimed) {
+              } else if (milestone && !movrClaimed && REWARD_CONTRACT_ADDRESS) {
                 autoClaimTried.current = false;
-                writeClaim({
-                  address: REWARD_CONTRACT_ADDRESS,
-                  abi: MILESTONE_REWARD_ABI,
-                  functionName: "claim",
-                  args: [runHash],
-                  chainId: monadTestnet.id,
-                  gas: CLAIM_GAS,
-                });
+                void (async () => {
+                  let gas = CLAIM_GAS_FLOOR;
+                  try {
+                    if (publicClient) {
+                      const estimated = await publicClient.estimateContractGas({
+                        address: REWARD_CONTRACT_ADDRESS,
+                        abi: MILESTONE_REWARD_ABI,
+                        functionName: "claim",
+                        args: [runHash],
+                        account: address,
+                      });
+                      gas = bufferedGas(estimated, CLAIM_GAS_FLOOR);
+                    }
+                  } catch {
+                    gas = CLAIM_GAS_FLOOR;
+                  }
+                  writeClaim({
+                    address: REWARD_CONTRACT_ADDRESS,
+                    abi: MILESTONE_REWARD_ABI,
+                    functionName: "claim",
+                    args: [runHash],
+                    chainId: monadTestnet.id,
+                    gas,
+                  });
+                })();
               }
             }}
           >

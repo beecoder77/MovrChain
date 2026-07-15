@@ -62,7 +62,7 @@ function mapKnownFailure(combined: string): string | null {
     return "This GPX looks invalid for attestation. Re-export and try again.";
   }
   if (combined.includes("out of gas") || combined.includes("intrinsic gas too low")) {
-    return "Transaction ran out of gas on Monad. Try again — publish needs extra gas for the feed write.";
+    return "Transaction ran out of gas on Monad. Retry — the gas limit was too low for this write (unused gas is refunded, so a higher limit does not raise the fee by itself).";
   }
   if (
     combined.includes("execution reverted") ||
