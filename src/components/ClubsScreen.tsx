@@ -22,6 +22,18 @@ import {
 } from "../lib/achievements";
 import { formatWalletError } from "../lib/errors";
 import { formatAddress } from "../lib/posts";
+import {
+  canProposeSpend,
+  CLUB_ROLE_LABEL,
+  resolveClubRole,
+  setClubAdmin,
+} from "../lib/clubRoles";
+import {
+  memberDisplayLabel,
+  parseProfile,
+  PROFILE_ABI,
+  PROFILE_ADDRESS,
+} from "../lib/profile";
 import { EXPLORER_URL } from "../lib/wagmi";
 import { Alert, Button } from "../design-system/components";
 import {
@@ -187,18 +199,22 @@ type ClubDetailProps = {
   address: `0x${string}`;
   clubId: bigint;
   onBack: () => void;
+  onOpenProfile: (member: `0x${string}`) => void;
 };
 
 export function ClubDetailScreen({
   address,
   clubId,
   onBack,
+  onOpenProfile,
 }: ClubDetailProps) {
   const [invite, setInvite] = useState("");
   const [title, setTitle] = useState("");
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState("1");
   const [donateAmount, setDonateAmount] = useState("5");
+  const [proposeOpen, setProposeOpen] = useState(false);
+  const [adminTick, setAdminTick] = useState(0);
   const [warning, setWarning] = useState<string | null>(null);
   const pendingDonateAction = useRef<"approve" | "donate" | null>(null);
   const publicClient = usePublicClient({ chainId: monadTestnet.id });
@@ -223,11 +239,36 @@ export function ClubDetailScreen({
   });
 
   const members = (membersRaw as `0x${string}`[] | undefined) ?? [];
-  const isCreator =
+  const isCaptain =
     club && club.creator.toLowerCase() === address.toLowerCase();
   const isMember = members.some(
     (m) => m.toLowerCase() === address.toLowerCase(),
   );
+  // adminTick forces re-read after promote/demote (UI-only roles)
+  void adminTick;
+  const canPropose = club
+    ? canProposeSpend(address, club.creator, clubId)
+    : false;
+
+  const profileReads = useReadContracts({
+    contracts: members.map((member) => ({
+      address: PROFILE_ADDRESS,
+      abi: PROFILE_ABI,
+      functionName: "getProfile" as const,
+      args: [member] as const,
+      chainId: monadTestnet.id,
+    })),
+    query: {
+      enabled: members.length > 0,
+      staleTime: 15_000,
+    },
+  });
+
+  const memberProfiles = members.map((_, i) => {
+    const row = profileReads.data?.[i];
+    if (!row || row.status !== "success") return undefined;
+    return parseProfile(row.result);
+  });
 
   const treasury = club?.treasury;
 
@@ -430,6 +471,7 @@ export function ClubDetailScreen({
       setDonateAmount("5");
     }
     pendingDonateAction.current = null;
+    setProposeOpen(false);
     setWarning(null);
   }, [
     isSuccess,
@@ -467,6 +509,28 @@ export function ClubDetailScreen({
     fn();
   };
 
+  const toggleAdmin = (member: `0x${string}`, makeAdmin: boolean) => {
+    if (!isCaptain) return;
+    if (member.toLowerCase() === club.creator.toLowerCase()) return;
+    setClubAdmin(clubId, member, makeAdmin);
+    setAdminTick((n) => n + 1);
+  };
+
+  const openProposeForm = () => {
+    if (!canPropose) {
+      setWarning("Only the Captain or Admins can propose a spend.");
+      return;
+    }
+    setProposeOpen(true);
+  };
+
+  const closeProposeForm = () => {
+    setProposeOpen(false);
+    setTitle("");
+    setReason("");
+    setAmount("1");
+  };
+
   const handleInvite = () => {
     const addr = invite.trim() as `0x${string}`;
     if (!isAddress(addr)) {
@@ -486,6 +550,10 @@ export function ClubDetailScreen({
   };
 
   const handlePropose = () => {
+    if (!canPropose) {
+      setWarning("Only the Captain or Admins can propose a spend.");
+      return;
+    }
     const wei = parseMovrInput(amount);
     if (!treasury || !title.trim() || !wei || wei === 0n) {
       setWarning("Add a title and MOVR amount.");
@@ -727,6 +795,7 @@ export function ClubDetailScreen({
         </Button>
         <h1 className="club-detail__title">{club.name}</h1>
         <p className="club-detail__sub">
+          {CLUB_ROLE_LABEL[resolveClubRole(address, club.creator, clubId)]} ·
           Treasury {formatMovr((bal as bigint) ?? 0n)} MOVR · Your power:{" "}
           {votePowerLabel(Number(power ?? 0n))}
         </p>
@@ -837,15 +906,44 @@ export function ClubDetailScreen({
         <h2 id="members-h" className="club-detail__panel-title">
           Members
         </h2>
-        <ul className="club-detail__members">
-          {members.map((m) => (
-            <li key={m}>
-              {formatAddress(m)}
-              {m.toLowerCase() === club.creator.toLowerCase() ? " · creator" : ""}
-            </li>
-          ))}
+        <ul className="club-detail__member-list">
+          {members.map((m, i) => {
+            const role = resolveClubRole(m, club.creator, clubId);
+            const label = memberDisplayLabel(memberProfiles[i], m);
+            const isYou = m.toLowerCase() === address.toLowerCase();
+            const showAdminToggle = Boolean(isCaptain && role !== "captain");
+            return (
+              <li key={m} className="club-detail__member-row">
+                <button
+                  type="button"
+                  className="club-detail__member-main"
+                  onClick={() => onOpenProfile(m)}
+                >
+                  <span className="club-detail__member-name">
+                    {label}
+                    {isYou ? " · you" : ""}
+                  </span>
+                  <span
+                    className={`club-detail__role club-detail__role--${role}`}
+                  >
+                    {CLUB_ROLE_LABEL[role]}
+                  </span>
+                </button>
+                {showAdminToggle && (
+                  <button
+                    type="button"
+                    className="club-detail__role-action"
+                    disabled={busy}
+                    onClick={() => toggleAdmin(m, role !== "admin")}
+                  >
+                    {role === "admin" ? "Demote" : "Make admin"}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
-        {isCreator && club.memberCount < 10 && (
+        {isCaptain && club.memberCount < 10 && (
           <div className="club-detail__invite">
             <input
               className="clubs-screen__input"
@@ -867,40 +965,64 @@ export function ClubDetailScreen({
         )}
       </section>
 
-      <section className="club-detail__panel" aria-labelledby="propose-h">
-        <h2 id="propose-h" className="club-detail__panel-title">
-          Propose a spend
-        </h2>
-        <input
-          className="clubs-screen__input"
-          placeholder="Jerseys / refreshments…"
-          value={title}
-          disabled={busy}
-          maxLength={64}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <input
-          className="clubs-screen__input"
-          placeholder="Why this helps the club"
-          value={reason}
-          disabled={busy}
-          maxLength={160}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <input
-          className="clubs-screen__input"
-          placeholder="Amount MOVR"
-          value={amount}
-          disabled={busy}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <Button block loading={busy} disabled={busy} onClick={handlePropose}>
-          Submit proposal
-        </Button>
-        <p className="club-detail__hint">
-          If passed, treasury MOVR is sent to whoever submitted the proposal.
-        </p>
-      </section>
+      {canPropose && (
+        <section className="club-detail__panel" aria-labelledby="propose-h">
+          <h2 id="propose-h" className="club-detail__panel-title">
+            Club spend
+          </h2>
+          {!proposeOpen ? (
+            <Button
+              variant="secondary"
+              block
+              disabled={busy}
+              onClick={openProposeForm}
+            >
+              Propose a spend
+            </Button>
+          ) : (
+            <div className="club-detail__propose-form">
+              <input
+                className="clubs-screen__input"
+                placeholder="Jerseys / refreshments…"
+                value={title}
+                disabled={busy}
+                maxLength={64}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <input
+                className="clubs-screen__input"
+                placeholder="Why this helps the club"
+                value={reason}
+                disabled={busy}
+                maxLength={160}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <input
+                className="clubs-screen__input"
+                placeholder="Amount MOVR"
+                value={amount}
+                disabled={busy}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <Button block loading={busy} disabled={busy} onClick={handlePropose}>
+                Submit proposal
+              </Button>
+              <Button
+                variant="ghost"
+                block
+                disabled={busy}
+                onClick={closeProposeForm}
+              >
+                Cancel
+              </Button>
+              <p className="club-detail__hint">
+                If passed, treasury MOVR is sent to whoever submitted the
+                proposal. Captain and Admins can propose.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {latestId !== undefined && propState === 0 && (
         <section className="club-detail__panel" aria-labelledby="vote-h">

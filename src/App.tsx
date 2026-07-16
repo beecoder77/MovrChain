@@ -149,16 +149,17 @@ export default function App() {
     (runner: `0x${string}`) => {
       if (address && runner.toLowerCase() === address.toLowerCase()) {
         setViewedProfile(null);
+        setDetailPost(null);
+        setAchievementView(null);
+        setEditingProfile(false);
+        setOpenClubId(null);
+        setTab("profile");
+        return;
+      }
       setDetailPost(null);
       setAchievementView(null);
       setEditingProfile(false);
-      setTab("profile");
-      return;
-    }
-    setDetailPost(null);
-    setAchievementView(null);
-    setEditingProfile(false);
-    setViewedProfile(runner);
+      setViewedProfile(runner);
     },
     [address],
   );
@@ -262,22 +263,6 @@ export default function App() {
     );
   }
 
-  if (openClubId !== null) {
-    return (
-      <AppShell
-        brand="MovrChain"
-        headerRight={<WalletChip address={address} connected />}
-        onBrandClick={goToFeed}
-      >
-        <ClubDetailScreen
-          address={address}
-          clubId={openClubId}
-          onBack={() => setOpenClubId(null)}
-        />
-      </AppShell>
-    );
-  }
-
   if (viewedProfile) {
     return (
       <AppShell
@@ -297,6 +282,23 @@ export default function App() {
               viewOnly: true,
             })
           }
+        />
+      </AppShell>
+    );
+  }
+
+  if (openClubId !== null) {
+    return (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+      >
+        <ClubDetailScreen
+          address={address}
+          clubId={openClubId}
+          onBack={() => setOpenClubId(null)}
+          onOpenProfile={openRunnerProfile}
         />
       </AppShell>
     );

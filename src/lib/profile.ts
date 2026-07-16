@@ -205,3 +205,17 @@ export function displayName(
   if (fallbackAddress) return `${fallbackAddress.slice(0, 6)}…${fallbackAddress.slice(-4)}`;
   return "Runner";
 }
+
+/** Club / roster label: @handle → display name → short address. */
+export function memberDisplayLabel(
+  profile: OnChainProfile | undefined,
+  fallbackAddress: string,
+): string {
+  if (profile?.exists && profile.handle.trim()) {
+    return formatHandle(profile.handle);
+  }
+  if (profile?.exists && profile.name.trim()) {
+    return profile.name.trim();
+  }
+  return `${fallbackAddress.slice(0, 6)}…${fallbackAddress.slice(-4)}`;
+}

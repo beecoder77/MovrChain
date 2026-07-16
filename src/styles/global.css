@@ -1564,6 +1564,105 @@ button {
   font-family: var(--font-mono);
 }
 
+.club-detail__member-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.club-detail__member-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.club-detail__member-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.club-detail__member-main:hover {
+  background: var(--color-surface-raised);
+}
+
+.club-detail__member-main:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.club-detail__member-name {
+  font-weight: var(--weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.club-detail__role {
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.club-detail__role--captain {
+  color: var(--color-primary);
+}
+
+.club-detail__role--admin {
+  color: var(--color-ink);
+}
+
+.club-detail__role-action {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.club-detail__role-action:hover {
+  background: color-mix(in oklch, var(--color-primary) 12%, var(--color-surface-raised));
+}
+
+.club-detail__role-action:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.club-detail__role-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.club-detail__propose-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .club-detail__prop-title {
   margin: 0;
   font-weight: var(--weight-semibold);
