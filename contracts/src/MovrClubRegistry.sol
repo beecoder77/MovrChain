@@ -15,17 +15,22 @@ contract MovrClubRegistry {
         address treasury;
         uint64 createdAt;
         bool exists;
+        bool isPublic; // public = join without approval; private = request + manager approve
     }
 
     ClubMemberNFT public immutable memberNft;
     address public immutable movr;
     address public staking; // set once; pushed to treasuries
     address public milestoneReward; // set once; pushed to treasuries
+    address public challenges; // global challenge contract; pushed to treasuries
 
     uint256 public nextClubId = 1;
     mapping(uint256 => Club) private _clubs;
     mapping(uint256 => address[]) private _members;
     mapping(uint256 => mapping(address => bool)) private _isMember;
+    mapping(uint256 => mapping(address => bool)) public clubAdmins;
+    mapping(uint256 => mapping(address => bool)) public joinPending;
+    mapping(uint256 => address[]) private _pendingApplicants;
     mapping(address => uint256) public clubOf; // 0 = none; one club per wallet (MVP)
 
     // Runner stats for club achievements
@@ -41,6 +46,12 @@ contract MovrClubRegistry {
     event MemberLeft(uint256 indexed clubId, address indexed account);
     event StakingSet(address indexed staking);
     event MilestoneRewardSet(address indexed milestoneReward);
+    event ChallengesSet(address indexed challenges);
+    event ClubAdminSet(uint256 indexed clubId, address indexed account, bool isAdmin);
+    event ClubVisibilitySet(uint256 indexed clubId, bool isPublic);
+    event JoinRequested(uint256 indexed clubId, address indexed account);
+    event JoinApproved(uint256 indexed clubId, address indexed account, address indexed by);
+    event JoinRejected(uint256 indexed clubId, address indexed account, address indexed by);
     event DonationCredited(address indexed donor, uint256 indexed clubId, uint256 amount);
 
     constructor(address movr_, address memberNft_) {
@@ -65,7 +76,14 @@ contract MovrClubRegistry {
         emit MilestoneRewardSet(milestoneReward_);
     }
 
-    /// @notice Push staking + milestoneReward wiring onto an existing club treasury.
+    function setChallenges(address challenges_) external {
+        require(challenges == address(0) && challenges_ != address(0), "set");
+        require(memberNft.hasRole(memberNft.DEFAULT_ADMIN_ROLE(), msg.sender), "admin");
+        challenges = challenges_;
+        emit ChallengesSet(challenges_);
+    }
+
+    /// @notice Push staking + milestoneReward + challenges wiring onto an existing club treasury.
     function wireTreasury(uint256 clubId) external {
         require(memberNft.hasRole(memberNft.DEFAULT_ADMIN_ROLE(), msg.sender), "admin");
         Club storage c = _clubs[clubId];
@@ -73,9 +91,30 @@ contract MovrClubRegistry {
         ClubTreasury t = ClubTreasury(c.treasury);
         if (staking != address(0)) t.setStaking(staking);
         if (milestoneReward != address(0)) t.setMilestoneReward(milestoneReward);
+        if (challenges != address(0)) t.setChallenges(challenges);
     }
 
-    function createClub(string calldata name) external returns (uint256 clubId, address treasury) {
+    /// @notice Captain promotes/demotes an admin (cannot demote captain).
+    function setClubAdmin(uint256 clubId, address account, bool isAdmin) external {
+        Club storage c = _clubs[clubId];
+        require(c.exists, "club");
+        require(msg.sender == c.creator, "creator");
+        require(account != address(0) && account != c.creator, "captain");
+        require(_isMember[clubId][account], "member");
+        clubAdmins[clubId][account] = isAdmin;
+        emit ClubAdminSet(clubId, account, isAdmin);
+    }
+
+    function isClubManager(uint256 clubId, address account) public view returns (bool) {
+        Club storage c = _clubs[clubId];
+        if (!c.exists || !_isMember[clubId][account]) return false;
+        return account == c.creator || clubAdmins[clubId][account];
+    }
+
+    function createClub(string calldata name, bool isPublic_)
+        external
+        returns (uint256 clubId, address treasury)
+    {
         require(clubOf[msg.sender] == 0, "already in club");
         bytes memory n = bytes(name);
         require(n.length > 0 && n.length <= MAX_NAME, "name");
@@ -89,20 +128,85 @@ contract MovrClubRegistry {
         if (milestoneReward != address(0)) {
             t.setMilestoneReward(milestoneReward);
         }
+        if (challenges != address(0)) {
+            t.setChallenges(challenges);
+        }
 
         _clubs[clubId] = Club({
             name: name,
             creator: msg.sender,
             treasury: treasury,
             createdAt: uint64(block.timestamp),
-            exists: true
+            exists: true,
+            isPublic: isPublic_
         });
 
         _addMember(clubId, msg.sender);
         emit ClubCreated(clubId, msg.sender, treasury, name);
+        emit ClubVisibilitySet(clubId, isPublic_);
     }
 
-    /// @notice Creator invites a wallet into the club (max 10).
+    /// @notice Captain flips public/private. Going public clears pending join requests.
+    function setClubVisibility(uint256 clubId, bool isPublic_) external {
+        Club storage c = _clubs[clubId];
+        require(c.exists, "club");
+        require(msg.sender == c.creator, "creator");
+        if (c.isPublic == isPublic_) return;
+        c.isPublic = isPublic_;
+        if (isPublic_) {
+            _clearPending(clubId);
+        }
+        emit ClubVisibilitySet(clubId, isPublic_);
+    }
+
+    /// @notice Join a public club immediately (max 10).
+    function joinClub(uint256 clubId) external {
+        Club storage c = _clubs[clubId];
+        require(c.exists, "club");
+        require(c.isPublic, "private");
+        require(clubOf[msg.sender] == 0, "busy");
+        require(!_isMember[clubId][msg.sender], "member");
+        require(_members[clubId].length < MAX_MEMBERS, "full");
+        _clearApplicant(clubId, msg.sender);
+        _addMember(clubId, msg.sender);
+    }
+
+    /// @notice Request to join a private club (awaits Captain/Admin approval).
+    function requestJoin(uint256 clubId) external {
+        Club storage c = _clubs[clubId];
+        require(c.exists, "club");
+        require(!c.isPublic, "public");
+        require(clubOf[msg.sender] == 0, "busy");
+        require(!_isMember[clubId][msg.sender], "member");
+        require(_members[clubId].length < MAX_MEMBERS, "full");
+        require(!joinPending[clubId][msg.sender], "pending");
+        joinPending[clubId][msg.sender] = true;
+        _pendingApplicants[clubId].push(msg.sender);
+        emit JoinRequested(clubId, msg.sender);
+    }
+
+    /// @notice Captain/Admin accepts a private join request.
+    function approveJoin(uint256 clubId, address account) external {
+        require(isClubManager(clubId, msg.sender), "manager");
+        Club storage c = _clubs[clubId];
+        require(c.exists, "club");
+        require(joinPending[clubId][account], "pending");
+        require(clubOf[account] == 0, "busy");
+        require(_members[clubId].length < MAX_MEMBERS, "full");
+        _clearApplicant(clubId, account);
+        _addMember(clubId, account);
+        emit JoinApproved(clubId, account, msg.sender);
+    }
+
+    /// @notice Captain/Admin rejects a private join request.
+    function rejectJoin(uint256 clubId, address account) external {
+        require(isClubManager(clubId, msg.sender), "manager");
+        require(joinPending[clubId][account], "pending");
+        _clearApplicant(clubId, account);
+        emit JoinRejected(clubId, account, msg.sender);
+    }
+
+    /// @notice Creator invites a wallet into the club (max 10). Clears any pending request.
     function addMember(uint256 clubId, address account) external {
         Club storage c = _clubs[clubId];
         require(c.exists, "club");
@@ -111,6 +215,7 @@ contract MovrClubRegistry {
         require(!_isMember[clubId][account], "member");
         require(clubOf[account] == 0, "busy");
         require(_members[clubId].length < MAX_MEMBERS, "full");
+        _clearApplicant(clubId, account);
         _addMember(clubId, account);
     }
 
@@ -132,11 +237,18 @@ contract MovrClubRegistry {
             address treasury,
             uint64 createdAt,
             bool exists,
-            uint256 memberCount_
+            uint256 memberCount_,
+            bool isPublic
         )
     {
         Club storage c = _clubs[clubId];
-        return (c.name, c.creator, c.treasury, c.createdAt, c.exists, _members[clubId].length);
+        return (
+            c.name, c.creator, c.treasury, c.createdAt, c.exists, _members[clubId].length, c.isPublic
+        );
+    }
+
+    function pendingApplicants(uint256 clubId) external view returns (address[] memory) {
+        return _pendingApplicants[clubId];
     }
 
     function isMember(uint256 clubId, address account) external view returns (bool) {
@@ -197,5 +309,26 @@ contract MovrClubRegistry {
                 break;
             }
         }
+    }
+
+    function _clearApplicant(uint256 clubId, address account) private {
+        if (!joinPending[clubId][account]) return;
+        joinPending[clubId][account] = false;
+        address[] storage list = _pendingApplicants[clubId];
+        for (uint256 i = 0; i < list.length; i++) {
+            if (list[i] == account) {
+                list[i] = list[list.length - 1];
+                list.pop();
+                break;
+            }
+        }
+    }
+
+    function _clearPending(uint256 clubId) private {
+        address[] storage list = _pendingApplicants[clubId];
+        for (uint256 i = 0; i < list.length; i++) {
+            joinPending[clubId][list[i]] = false;
+        }
+        delete _pendingApplicants[clubId];
     }
 }

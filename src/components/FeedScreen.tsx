@@ -4,6 +4,7 @@ import { usePostsClubRewards } from "../lib/runRewards";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
 import { useClubNamesByAddress, useMyClubRoster } from "../lib/useClubFeed";
 import { TimelinePost } from "./TimelinePost";
+import { ChallengeNoticeBanner } from "./ChallengeNoticeBanner";
 import { Button } from "../design-system/components";
 
 type FeedTab = "yours" | "community" | "club";
@@ -178,6 +179,11 @@ export function FeedScreen({
           </button>
         </div>
       </div>
+
+      <ChallengeNoticeBanner
+        address={address}
+        onOpenClubs={() => onOpenClubsTab?.()}
+      />
 
       <div
         id="feed-panel"

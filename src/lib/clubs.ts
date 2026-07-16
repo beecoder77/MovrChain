@@ -14,6 +14,10 @@ export const MAX_DONATE_BPS = 500;
 
 export const CREATE_CLUB_GAS = 3_200_000n;
 export const ADD_MEMBER_GAS = 450_000n;
+export const JOIN_CLUB_GAS = 450_000n;
+export const REQUEST_JOIN_GAS = 200_000n;
+export const APPROVE_JOIN_GAS = 450_000n;
+export const SET_VISIBILITY_GAS = 120_000n;
 /** Monad eth_estimateGas often undercounts storage (strings / vote maps) — floors are ceilings; unused is refunded. */
 export const PROPOSE_GAS = 750_000n;
 export const VOTE_GAS = 550_000n;
@@ -33,11 +37,58 @@ export const CLUB_REGISTRY_ABI = [
   {
     type: "function",
     name: "createClub",
-    inputs: [{ name: "name", type: "string" }],
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "isPublic_", type: "bool" },
+    ],
     outputs: [
       { name: "clubId", type: "uint256" },
       { name: "treasury", type: "address" },
     ],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setClubVisibility",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "isPublic_", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "joinClub",
+    inputs: [{ name: "clubId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "requestJoin",
+    inputs: [{ name: "clubId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "approveJoin",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "rejectJoin",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [],
     stateMutability: "nonpayable",
   },
   {
@@ -68,7 +119,25 @@ export const CLUB_REGISTRY_ABI = [
       { name: "createdAt", type: "uint64" },
       { name: "exists", type: "bool" },
       { name: "memberCount_", type: "uint256" },
+      { name: "isPublic", type: "bool" },
     ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "pendingApplicants",
+    inputs: [{ name: "clubId", type: "uint256" }],
+    outputs: [{ name: "", type: "address[]" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "joinPending",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
   },
   {
@@ -142,6 +211,37 @@ export const CLUB_REGISTRY_ABI = [
     name: "clubMemberCountFor",
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setClubAdmin",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "account", type: "address" },
+      { name: "isAdmin", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "isClubManager",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "clubAdmins",
+    inputs: [
+      { name: "clubId", type: "uint256" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
   },
 ] as const;
@@ -312,6 +412,7 @@ export type ClubInfo = {
   createdAt: bigint;
   exists: boolean;
   memberCount: number;
+  isPublic: boolean;
 };
 
 export function parseClub(
@@ -330,6 +431,7 @@ export function parseClub(
       createdAt: BigInt(data[3] ?? 0),
       exists: true,
       memberCount: Number(data[5] ?? 0),
+      isPublic: Boolean(data[6]),
     };
   }
   const d = data as Record<string, unknown>;
@@ -342,7 +444,47 @@ export function parseClub(
     createdAt: BigInt((d.createdAt as bigint | number | string) ?? d[3] ?? 0),
     exists: true,
     memberCount: Number(d.memberCount_ ?? d[5] ?? 0),
+    isPublic: Boolean(d.isPublic ?? d[6]),
   };
+}
+
+/** Equal-weight treasury + run activity after normalizing to each max. */
+export function rankClubScore(
+  treasuryWei: bigint,
+  runCount: number,
+  maxTreasury: bigint,
+  maxRuns: number,
+): number {
+  const t =
+    maxTreasury > 0n
+      ? Number((treasuryWei * 10_000n) / maxTreasury) / 10_000
+      : 0;
+  const r = maxRuns > 0 ? runCount / maxRuns : 0;
+  return t + r;
+}
+
+export function sortClubsByRank<
+  T extends {
+    treasuryWei: bigint;
+    runCount: number;
+    memberCount: number;
+    createdAt: bigint;
+  },
+>(clubs: T[]): T[] {
+  let maxT = 0n;
+  let maxR = 0;
+  for (const c of clubs) {
+    if (c.treasuryWei > maxT) maxT = c.treasuryWei;
+    if (c.runCount > maxR) maxR = c.runCount;
+  }
+  return [...clubs].sort((a, b) => {
+    const sa = rankClubScore(a.treasuryWei, a.runCount, maxT, maxR);
+    const sb = rankClubScore(b.treasuryWei, b.runCount, maxT, maxR);
+    if (sb !== sa) return sb - sa;
+    if (b.memberCount !== a.memberCount) return b.memberCount - a.memberCount;
+    if (a.createdAt === b.createdAt) return 0;
+    return a.createdAt > b.createdAt ? -1 : 1;
+  });
 }
 
 export function formatDonateBps(bps: number): string {

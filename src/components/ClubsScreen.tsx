@@ -1,5 +1,6 @@
 import {
   ADD_MEMBER_GAS,
+  APPROVE_JOIN_GAS,
   bufferedClubGas,
   buildDonationLeaderboard,
   CLUB_REGISTRY,
@@ -8,7 +9,10 @@ import {
   CREATE_CLUB_GAS,
   DONATE_GAS,
   EXECUTE_GAS,
+  JOIN_CLUB_GAS,
   PROPOSE_GAS,
+  REQUEST_JOIN_GAS,
+  SET_VISIBILITY_GAS,
   VOTE_GAS,
   parseClub,
   votePowerLabel,
@@ -26,8 +30,15 @@ import {
   canProposeSpend,
   CLUB_ROLE_LABEL,
   resolveClubRole,
-  setClubAdmin,
 } from "../lib/clubRoles";
+import { SET_CLUB_ADMIN_GAS } from "../lib/clubChallenges";
+import {
+  ClubChallengesPanel,
+  ClubChallengePins,
+} from "./ClubChallengesPanel";
+import { ChallengeNoticeBanner } from "./ChallengeNoticeBanner";
+import { useClubChallengeList } from "../lib/useClubChallenges";
+import { useClubLeaderboard } from "../lib/useClubLeaderboard";
 import {
   memberDisplayLabel,
   parseProfile,
@@ -54,6 +65,8 @@ type ClubsScreenProps = {
 
 export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
   const [name, setName] = useState("");
+  const [isPublicCreate, setIsPublicCreate] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const deployed = CLUB_REGISTRY !== zeroAddress;
 
@@ -78,6 +91,13 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
   });
 
   const club = clubId > 0n ? parseClub(clubId, clubRaw) : null;
+  const { challenges: allChallenges } = useClubChallengeList(club?.clubId);
+  const {
+    ranked,
+    pendingByClub,
+    loading: listLoading,
+    refetchAll: refetchLeaderboard,
+  } = useClubLeaderboard(address);
 
   const { writeContract, data: txHash, isPending, error, reset } =
     useWriteContract();
@@ -92,11 +112,14 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
     if (!isSuccess || receipt?.status === "reverted") return;
     void refetchClubOf();
     void refetchClub();
+    refetchLeaderboard();
     setName("");
+    setCreateOpen(false);
     setWarning(null);
-  }, [isSuccess, receipt, refetchClubOf, refetchClub]);
+  }, [isSuccess, receipt, refetchClubOf, refetchClub, refetchLeaderboard]);
 
   const busy = isPending || confirming;
+  const inClub = clubId > 0n;
 
   const handleCreate = () => {
     setWarning(null);
@@ -114,9 +137,22 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
       address: CLUB_REGISTRY,
       abi: CLUB_REGISTRY_ABI,
       functionName: "createClub",
-      args: [trimmed],
+      args: [trimmed, isPublicCreate],
       chainId: monadTestnet.id,
       gas: CREATE_CLUB_GAS,
+    });
+  };
+
+  const handleJoin = (targetId: bigint, isPublic: boolean) => {
+    setWarning(null);
+    reset();
+    writeContract({
+      address: CLUB_REGISTRY,
+      abi: CLUB_REGISTRY_ABI,
+      functionName: isPublic ? "joinClub" : "requestJoin",
+      args: [targetId],
+      chainId: monadTestnet.id,
+      gas: isPublic ? JOIN_CLUB_GAS : REQUEST_JOIN_GAS,
     });
   };
 
@@ -144,29 +180,125 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
           Clubs
         </h1>
         <p className="clubs-screen__sub">
-          Up to 10 runners. Shared treasury. Vote on jerseys, refreshments, and
-          more — yield donate boosts your voting weight.
+          Ranked by treasury and verified runs. Public clubs join instantly;
+          private clubs need Captain or Admin approval.
         </p>
       </header>
 
-      {club ? (
+      {club && (
+        <ChallengeNoticeBanner
+          address={address}
+          onOpenClubs={() => onOpenClub(club.clubId)}
+          ctaLabel="View challenges"
+        />
+      )}
+
+      {warning && (
+        <Alert tone="warning" className="ds-alert--footer-spaced">
+          {warning}
+        </Alert>
+      )}
+
+      {club && (
         <button
           type="button"
-          className="club-card"
+          className="club-card club-card--yours"
           onClick={() => onOpenClub(club.clubId)}
         >
           <div className="club-card__row">
             <span className="club-card__name">{club.name}</span>
-            <span className="club-card__meta">
-              {club.memberCount}/10 members
+            <span className="club-card__badge">
+              {club.isPublic ? "Public" : "Private"} · Yours
             </span>
           </div>
-          <p className="club-card__cta">Open club · treasury & votes</p>
+          <p className="club-card__meta">
+            {club.memberCount}/10 members · Open club
+          </p>
+          <ClubChallengePins challenges={allChallenges} />
         </button>
-      ) : (
+      )}
+
+      <section className="club-rank" aria-labelledby="club-rank-h">
+        <h2 id="club-rank-h" className="club-rank__title">
+          Leaderboard
+        </h2>
+        {listLoading && ranked.length === 0 && (
+          <p className="clubs-screen__hint">Loading clubs…</p>
+        )}
+        {!listLoading && ranked.length === 0 && (
+          <div className="clubs-screen__empty">
+            <p className="clubs-screen__empty-title">No clubs yet</p>
+            <p className="clubs-screen__empty-body">
+              Be first — create a public or private pack below.
+            </p>
+          </div>
+        )}
+        <ul className="club-rank__list">
+          {ranked.map((row) => {
+            const isYours = clubId === row.clubId;
+            const pending = pendingByClub.get(row.clubId.toString()) ?? false;
+            const full = row.memberCount >= 10;
+            return (
+              <li key={row.clubId.toString()} className="club-rank__item">
+                <button
+                  type="button"
+                  className="club-rank__row"
+                  onClick={() => onOpenClub(row.clubId)}
+                >
+                  <span
+                    className={`club-rank__place${row.rank <= 3 ? " club-rank__place--top" : ""}`}
+                  >
+                    {row.rank}
+                  </span>
+                  <span className="club-rank__body">
+                    <span className="club-rank__name">{row.name}</span>
+                    <span className="club-rank__meta">
+                      {row.isPublic ? "Public" : "Private"} · {row.memberCount}
+                      /10 · {formatMovr(row.treasuryWei)} MOVR · {row.runCount}{" "}
+                      runs
+                    </span>
+                  </span>
+                </button>
+                {!inClub && !isYours && (
+                  <div className="club-rank__action">
+                    {pending ? (
+                      <span className="club-rank__pending">Awaiting approval</span>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        disabled={busy || full}
+                        onClick={() => handleJoin(row.clubId, row.isPublic)}
+                      >
+                        {full
+                          ? "Full"
+                          : row.isPublic
+                            ? "Join"
+                            : "Request"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      {!inClub && !createOpen && (
+        <Button
+          variant="secondary"
+          block
+          disabled={busy}
+          onClick={() => setCreateOpen(true)}
+        >
+          Create a club
+        </Button>
+      )}
+
+      {!inClub && createOpen && (
         <div className="clubs-screen__create">
           <label className="clubs-screen__field">
-            <span className="clubs-screen__label">Create a club</span>
+            <span className="clubs-screen__label">Club name</span>
             <input
               className="clubs-screen__input"
               type="text"
@@ -177,17 +309,42 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          {warning && (
-            <Alert tone="warning" className="ds-alert--footer-spaced">
-              {warning}
-            </Alert>
-          )}
+          <fieldset className="club-visibility">
+            <legend className="clubs-screen__label">Visibility</legend>
+            <label className="club-visibility__option">
+              <input
+                type="radio"
+                name="create-visibility"
+                checked={isPublicCreate}
+                disabled={busy}
+                onChange={() => setIsPublicCreate(true)}
+              />
+              Public — anyone can join
+            </label>
+            <label className="club-visibility__option">
+              <input
+                type="radio"
+                name="create-visibility"
+                checked={!isPublicCreate}
+                disabled={busy}
+                onChange={() => setIsPublicCreate(false)}
+              />
+              Private — Captain/Admin approve
+            </label>
+          </fieldset>
           <Button block loading={busy} disabled={busy} onClick={handleCreate}>
             {busy ? "Creating on Monad…" : "Create club + treasury"}
           </Button>
+          <Button
+            variant="ghost"
+            block
+            disabled={busy}
+            onClick={() => setCreateOpen(false)}
+          >
+            Cancel
+          </Button>
           <p className="clubs-screen__hint">
-            Creating mints your Club Member NFT (2× vote). You can invite up to
-            9 more wallets.
+            Creating mints your Club Member NFT (2× vote). Max 10 runners.
           </p>
         </div>
       )}
@@ -214,7 +371,6 @@ export function ClubDetailScreen({
   const [amount, setAmount] = useState("1");
   const [donateAmount, setDonateAmount] = useState("5");
   const [proposeOpen, setProposeOpen] = useState(false);
-  const [adminTick, setAdminTick] = useState(0);
   const [warning, setWarning] = useState<string | null>(null);
   const pendingDonateAction = useRef<"approve" | "donate" | null>(null);
   const publicClient = usePublicClient({ chainId: monadTestnet.id });
@@ -244,11 +400,79 @@ export function ClubDetailScreen({
   const isMember = members.some(
     (m) => m.toLowerCase() === address.toLowerCase(),
   );
-  // adminTick forces re-read after promote/demote (UI-only roles)
-  void adminTick;
-  const canPropose = club
-    ? canProposeSpend(address, club.creator, clubId)
-    : false;
+
+  const { data: isManagerRaw, refetch: refetchManager } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "isClubManager",
+    args: [clubId, address],
+    chainId: monadTestnet.id,
+    query: { enabled: Boolean(club), staleTime: 4_000 },
+  });
+
+  const canPropose = canProposeSpend(Boolean(isManagerRaw));
+  const isManager = canPropose;
+
+  const { data: viewerClubOfRaw, refetch: refetchViewerClubOf } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "clubOf",
+    args: [address],
+    chainId: monadTestnet.id,
+    query: { staleTime: 4_000 },
+  });
+  const viewerClubOf = (viewerClubOfRaw as bigint | undefined) ?? 0n;
+  const canJoinThisClub = viewerClubOf === 0n && !isMember;
+
+  const { data: joinPendingRaw, refetch: refetchJoinPending } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "joinPending",
+    args: [clubId, address],
+    chainId: monadTestnet.id,
+    query: { enabled: canJoinThisClub || Boolean(club), staleTime: 4_000 },
+  });
+  const myJoinPending = Boolean(joinPendingRaw);
+
+  const { data: applicantsRaw, refetch: refetchApplicants } = useReadContract({
+    address: CLUB_REGISTRY,
+    abi: CLUB_REGISTRY_ABI,
+    functionName: "pendingApplicants",
+    args: [clubId],
+    chainId: monadTestnet.id,
+    query: {
+      enabled: Boolean(club && !club.isPublic && isManager),
+      staleTime: 4_000,
+    },
+  });
+  const applicants = (applicantsRaw as `0x${string}`[] | undefined) ?? [];
+
+  const applicantProfiles = useReadContracts({
+    contracts: applicants.map((a) => ({
+      address: PROFILE_ADDRESS,
+      abi: PROFILE_ABI,
+      functionName: "getProfile" as const,
+      args: [a] as const,
+      chainId: monadTestnet.id,
+    })),
+    query: { enabled: applicants.length > 0, staleTime: 15_000 },
+  });
+
+  const adminReads = useReadContracts({
+    contracts: members.map((m) => ({
+      address: CLUB_REGISTRY,
+      abi: CLUB_REGISTRY_ABI,
+      functionName: "clubAdmins" as const,
+      args: [clubId, m] as const,
+      chainId: monadTestnet.id,
+    })),
+    query: { enabled: members.length > 0, staleTime: 4_000 },
+  });
+
+  const {
+    challenges: detailChallenges,
+    refetchAll: refetchChallenges,
+  } = useClubChallengeList(clubId);
 
   const profileReads = useReadContracts({
     contracts: members.map((member) => ({
@@ -467,6 +691,13 @@ export function ClubDetailScreen({
     void donationReads.refetch();
     void refetchMyDonated();
     void refetchAllowance();
+    void refetchManager();
+    void refetchChallenges();
+    void adminReads.refetch();
+    void refetchViewerClubOf();
+    void refetchJoinPending();
+    void refetchApplicants();
+    void applicantProfiles.refetch();
     if (pendingDonateAction.current === "donate") {
       setDonateAmount("5");
     }
@@ -488,6 +719,13 @@ export function ClubDetailScreen({
     donationReads,
     refetchMyDonated,
     refetchAllowance,
+    refetchManager,
+    refetchChallenges,
+    adminReads,
+    refetchViewerClubOf,
+    refetchJoinPending,
+    refetchApplicants,
+    applicantProfiles,
   ]);
 
   const busy = isPending || confirming;
@@ -512,8 +750,70 @@ export function ClubDetailScreen({
   const toggleAdmin = (member: `0x${string}`, makeAdmin: boolean) => {
     if (!isCaptain) return;
     if (member.toLowerCase() === club.creator.toLowerCase()) return;
-    setClubAdmin(clubId, member, makeAdmin);
-    setAdminTick((n) => n + 1);
+    run(() =>
+      writeContract({
+        address: CLUB_REGISTRY,
+        abi: CLUB_REGISTRY_ABI,
+        functionName: "setClubAdmin",
+        args: [clubId, member, makeAdmin],
+        chainId: monadTestnet.id,
+        gas: SET_CLUB_ADMIN_GAS,
+      }),
+    );
+  };
+
+  const handleSetVisibility = (nextPublic: boolean) => {
+    if (!isCaptain) return;
+    run(() =>
+      writeContract({
+        address: CLUB_REGISTRY,
+        abi: CLUB_REGISTRY_ABI,
+        functionName: "setClubVisibility",
+        args: [clubId, nextPublic],
+        chainId: monadTestnet.id,
+        gas: SET_VISIBILITY_GAS,
+      }),
+    );
+  };
+
+  const handleJoinThisClub = () => {
+    if (!canJoinThisClub || !club) return;
+    run(() =>
+      writeContract({
+        address: CLUB_REGISTRY,
+        abi: CLUB_REGISTRY_ABI,
+        functionName: club.isPublic ? "joinClub" : "requestJoin",
+        args: [clubId],
+        chainId: monadTestnet.id,
+        gas: club.isPublic ? JOIN_CLUB_GAS : REQUEST_JOIN_GAS,
+      }),
+    );
+  };
+
+  const handleApproveApplicant = (account: `0x${string}`) => {
+    run(() =>
+      writeContract({
+        address: CLUB_REGISTRY,
+        abi: CLUB_REGISTRY_ABI,
+        functionName: "approveJoin",
+        args: [clubId, account],
+        chainId: monadTestnet.id,
+        gas: APPROVE_JOIN_GAS,
+      }),
+    );
+  };
+
+  const handleRejectApplicant = (account: `0x${string}`) => {
+    run(() =>
+      writeContract({
+        address: CLUB_REGISTRY,
+        abi: CLUB_REGISTRY_ABI,
+        functionName: "rejectJoin",
+        args: [clubId, account],
+        chainId: monadTestnet.id,
+        gas: APPROVE_JOIN_GAS,
+      }),
+    );
   };
 
   const openProposeForm = () => {
@@ -795,11 +1095,100 @@ export function ClubDetailScreen({
         </Button>
         <h1 className="club-detail__title">{club.name}</h1>
         <p className="club-detail__sub">
-          {CLUB_ROLE_LABEL[resolveClubRole(address, club.creator, clubId)]} ·
-          Treasury {formatMovr((bal as bigint) ?? 0n)} MOVR · Your power:{" "}
-          {votePowerLabel(Number(power ?? 0n))}
+          {club.isPublic ? "Public" : "Private"}
+          {isMember
+            ? ` · ${CLUB_ROLE_LABEL[
+                resolveClubRole(
+                  address,
+                  club.creator,
+                  Boolean(isManagerRaw) &&
+                    address.toLowerCase() !== club.creator.toLowerCase(),
+                )
+              ]} · Treasury ${formatMovr((bal as bigint) ?? 0n)} MOVR · Your power: ${votePowerLabel(Number(power ?? 0n))}`
+            : ` · Treasury ${formatMovr((bal as bigint) ?? 0n)} MOVR · ${club.memberCount}/10 members`}
         </p>
       </header>
+
+      {canJoinThisClub && (
+        <div className="club-detail__join">
+          {myJoinPending ? (
+            <p className="club-detail__hint" role="status">
+              Join request pending — waiting for Captain or Admin approval.
+            </p>
+          ) : club.memberCount >= 10 ? (
+            <p className="club-detail__hint">This club is full (10/10).</p>
+          ) : (
+            <Button block loading={busy} disabled={busy} onClick={handleJoinThisClub}>
+              {club.isPublic ? "Join club" : "Request to join"}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {isCaptain && (
+        <section className="club-detail__panel" aria-labelledby="visibility-h">
+          <h2 id="visibility-h" className="club-detail__panel-title">
+            Visibility
+          </h2>
+          <p className="club-detail__hint">
+            {club.isPublic
+              ? "Anyone can join without approval. Flip to private to require Captain/Admin approval."
+              : "Join requests need your approval. Flip to public to clear pending requests and allow instant joins."}
+          </p>
+          <Button
+            variant="secondary"
+            block
+            disabled={busy}
+            onClick={() => handleSetVisibility(!club.isPublic)}
+          >
+            Make {club.isPublic ? "private" : "public"}
+          </Button>
+        </section>
+      )}
+
+      {isManager && !club.isPublic && applicants.length > 0 && (
+        <section className="club-detail__panel" aria-labelledby="applicants-h">
+          <h2 id="applicants-h" className="club-detail__panel-title">
+            Join requests
+          </h2>
+          <ul className="club-challenge-card__pending">
+            {applicants.map((a, i) => {
+              const row = applicantProfiles.data?.[i];
+              const profile =
+                row?.status === "success" ? parseProfile(row.result) : undefined;
+              return (
+                <li key={a} className="club-challenge-card__pending-row">
+                  <button
+                    type="button"
+                    className="club-detail__member-main"
+                    onClick={() => onOpenProfile(a)}
+                  >
+                    {memberDisplayLabel(profile, a)}
+                  </button>
+                  <div className="club-challenge-card__pending-actions">
+                    <button
+                      type="button"
+                      className="club-detail__role-action"
+                      disabled={busy || club.memberCount >= 10}
+                      onClick={() => handleApproveApplicant(a)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="club-detail__role-action"
+                      disabled={busy}
+                      onClick={() => handleRejectApplicant(a)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="club-detail__stats">
         <div className="club-detail__stat">
@@ -908,7 +1297,10 @@ export function ClubDetailScreen({
         </h2>
         <ul className="club-detail__member-list">
           {members.map((m, i) => {
-            const role = resolveClubRole(m, club.creator, clubId);
+            const adminRow = adminReads.data?.[i];
+            const isAdminOnChain =
+              adminRow?.status === "success" && Boolean(adminRow.result);
+            const role = resolveClubRole(m, club.creator, isAdminOnChain);
             const label = memberDisplayLabel(memberProfiles[i], m);
             const isYou = m.toLowerCase() === address.toLowerCase();
             const showAdminToggle = Boolean(isCaptain && role !== "captain");
@@ -1023,6 +1415,20 @@ export function ClubDetailScreen({
           )}
         </section>
       )}
+
+      <ClubChallengesPanel
+        clubId={clubId}
+        address={address}
+        members={members}
+        isMember={isMember}
+        isManager={isManager}
+        busy={busy}
+        challenges={detailChallenges}
+        onRefresh={refetchChallenges}
+        onWrite={run}
+        writeContract={writeContract}
+        publicClient={publicClient ?? undefined}
+      />
 
       {latestId !== undefined && propState === 0 && (
         <section className="club-detail__panel" aria-labelledby="vote-h">

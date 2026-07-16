@@ -19,7 +19,8 @@ interface IClubRegistryForReward {
             address treasury,
             uint64 createdAt,
             bool exists,
-            uint256 memberCount_
+            uint256 memberCount_,
+            bool isPublic
         );
 }
 
@@ -131,7 +132,7 @@ contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
             if (clubId != 0) {
                 clubAmount = (distanceMeters * clubRewardPer10Km) / METERS_PER_CLUB_REWARD;
                 if (clubAmount > 0) {
-                    (, , treasury, , , ) = clubRegistry.getClub(clubId);
+                    (, , treasury, , , , ) = clubRegistry.getClub(clubId);
                     require(treasury != address(0), "treasury");
                 }
             }

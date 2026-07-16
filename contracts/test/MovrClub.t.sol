@@ -28,7 +28,7 @@ contract MovrClubTest is Test {
 
     function testCreateClubMintsMemberNftAndJoinBadge() public {
         vm.prank(creator);
-        (uint256 clubId, address treasury) = registry.createClub("Dawn Pack");
+        (uint256 clubId, address treasury) = registry.createClub("Dawn Pack", true);
         assertTrue(treasury != address(0));
         assertEq(registry.memberCount(clubId), 1);
         assertTrue(memberNft.holdsMemberNFT(creator, clubId));
@@ -41,7 +41,7 @@ contract MovrClubTest is Test {
 
     function testMaxTenMembersAndVotingPower() public {
         vm.prank(creator);
-        (uint256 clubId, address treasury) = registry.createClub("Ten");
+        (uint256 clubId, address treasury) = registry.createClub("Ten", true);
 
         for (uint256 i = 1; i < 10; i++) {
             address m = address(uint160(0x1000 + i));
@@ -61,7 +61,7 @@ contract MovrClubTest is Test {
 
     function testDonateAndTopDonorWeight() public {
         vm.prank(creator);
-        (uint256 clubId, address treasury) = registry.createClub("Donors");
+        (uint256 clubId, address treasury) = registry.createClub("Donors", true);
         vm.prank(creator);
         registry.addMember(clubId, alice);
         vm.prank(creator);
@@ -96,7 +96,7 @@ contract MovrClubTest is Test {
 
     function testProposalVoteExecute() public {
         vm.prank(creator);
-        (uint256 clubId, address treasury) = registry.createClub("Spend");
+        (uint256 clubId, address treasury) = registry.createClub("Spend", true);
         vm.prank(creator);
         registry.addMember(clubId, alice);
 
@@ -125,7 +125,7 @@ contract MovrClubTest is Test {
 
     function testExecuteRequiresAllVotesOr24h() public {
         vm.prank(creator);
-        (uint256 clubId, address treasury) = registry.createClub("Wait");
+        (uint256 clubId, address treasury) = registry.createClub("Wait", true);
         vm.prank(creator);
         registry.addMember(clubId, alice);
 
@@ -148,5 +148,64 @@ contract MovrClubTest is Test {
         assertTrue(t.votingClosed(pid));
         assertTrue(t.canExecute(pid));
         t.execute(pid);
+    }
+
+    function testPublicJoinAndPrivateApproval() public {
+        vm.prank(creator);
+        (uint256 publicId,) = registry.createClub("Open Pack", true);
+
+        vm.prank(alice);
+        registry.joinClub(publicId);
+        assertTrue(registry.isMember(publicId, alice));
+        assertEq(registry.clubOf(alice), publicId);
+
+        vm.prank(bob);
+        (uint256 privateId,) = registry.createClub("Closed Pack", false);
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("busy"));
+        registry.requestJoin(privateId);
+
+        address carol = address(0xCA);
+        vm.prank(carol);
+        registry.requestJoin(privateId);
+        assertTrue(registry.joinPending(privateId, carol));
+
+        vm.prank(bob);
+        registry.approveJoin(privateId, carol);
+        assertTrue(registry.isMember(privateId, carol));
+        assertFalse(registry.joinPending(privateId, carol));
+    }
+
+    function testCaptainFlipsVisibilityClearsPending() public {
+        vm.prank(creator);
+        (uint256 clubId,) = registry.createClub("Flip", false);
+
+        vm.prank(alice);
+        registry.requestJoin(clubId);
+        assertTrue(registry.joinPending(clubId, alice));
+
+        vm.prank(creator);
+        registry.setClubVisibility(clubId, true);
+        assertFalse(registry.joinPending(clubId, alice));
+
+        vm.prank(alice);
+        registry.joinClub(clubId);
+        assertTrue(registry.isMember(clubId, alice));
+    }
+
+    function testNonManagerCannotApproveJoin() public {
+        vm.prank(creator);
+        (uint256 clubId,) = registry.createClub("Gate", false);
+        vm.prank(creator);
+        registry.addMember(clubId, alice);
+
+        address carol = address(0xCA);
+        vm.prank(carol);
+        registry.requestJoin(clubId);
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("manager"));
+        registry.approveJoin(clubId, carol);
     }
 }

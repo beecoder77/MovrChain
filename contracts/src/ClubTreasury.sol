@@ -47,6 +47,7 @@ contract ClubTreasury is ReentrancyGuard {
     uint256 public immutable clubId;
     address public staking; // authorized to push donations (yield %)
     address public milestoneReward; // authorized to push run → treasury MOVR
+    address public challenges; // authorized to escrow challenge rewards
 
     /// @notice Quorum unlock: all members voted, or this long after propose
     uint64 public constant VOTING_PERIOD = 24 hours;
@@ -67,6 +68,7 @@ contract ClubTreasury is ReentrancyGuard {
     event Cancelled(uint256 indexed proposalId);
     event StakingSet(address indexed staking);
     event MilestoneRewardSet(address indexed milestoneReward);
+    event ChallengesSet(address indexed challenges);
 
     constructor(address movr_, address registry_, address memberNft_, uint256 clubId_) {
         require(
@@ -89,6 +91,19 @@ contract ClubTreasury is ReentrancyGuard {
         require(msg.sender == address(registry), "registry");
         milestoneReward = milestoneReward_;
         emit MilestoneRewardSet(milestoneReward_);
+    }
+
+    function setChallenges(address challenges_) external {
+        require(msg.sender == address(registry), "registry");
+        challenges = challenges_;
+        emit ChallengesSet(challenges_);
+    }
+
+    /// @notice Escrow MOVR from treasury into the challenges contract.
+    function lockChallengeFunds(uint256 amount) external {
+        require(msg.sender == challenges, "auth");
+        require(amount > 0 && amount <= balance(), "amount");
+        movr.safeTransfer(challenges, amount);
     }
 
     function balance() public view returns (uint256) {

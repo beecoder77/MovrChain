@@ -11,6 +11,7 @@ import {
 export type ClubRoster = {
   clubId: bigint;
   clubName: string;
+  members: `0x${string}`[];
   memberSet: Set<string>;
   inClub: boolean;
 };
@@ -54,6 +55,7 @@ export function useMyClubRoster(address: `0x${string}` | undefined): ClubRoster 
     return {
       clubId,
       clubName: club?.name ?? "",
+      members,
       memberSet: new Set(members.map((m) => m.toLowerCase())),
       inClub: clubId > 0n && Boolean(club?.exists),
     };

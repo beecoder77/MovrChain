@@ -159,7 +159,7 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         if (bps > 0 && address(clubRegistry) != address(0)) {
             uint256 clubId = clubRegistry.clubOf(msg.sender);
             if (clubId != 0) {
-                (, , treasury,,,) = clubRegistry.getClub(clubId);
+                (, , treasury,,,,) = clubRegistry.getClub(clubId);
                 donated = (reward * uint256(bps)) / 10_000;
                 if (donated > 0 && treasury != address(0)) {
                     movr.safeTransfer(treasury, donated);

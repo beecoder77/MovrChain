@@ -78,7 +78,7 @@ contract MovrMilestoneRewardTest is Test {
 
     function testClubMemberGetsTreasuryCutAndTopDonorCredit() public {
         vm.prank(runner);
-        (uint256 clubId, address treasury) = registry.createClub("Pulse");
+        (uint256 clubId, address treasury) = registry.createClub("Pulse", true);
         assertEq(clubId, 1);
 
         bytes32 hash = keccak256("club-run");
@@ -100,7 +100,7 @@ contract MovrMilestoneRewardTest is Test {
 
     function testClubCutProportional() public {
         vm.prank(runner);
-        (, address treasury) = registry.createClub("Split");
+        (, address treasury) = registry.createClub("Split", true);
 
         bytes32 hash = keccak256("5k-club");
         vm.prank(runner);
