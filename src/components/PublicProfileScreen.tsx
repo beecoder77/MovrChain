@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useReadContracts } from "wagmi";
 import { monadTestnet } from "viem/chains";
 import type { AchievementDef, RunPost } from "../lib/posts";
@@ -20,6 +21,9 @@ import {
   formatHandle,
 } from "../lib/profile";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
+import { useClubNamesByAddress } from "../lib/useClubFeed";
+import { usePostsClubRewards } from "../lib/runRewards";
+import { TimelinePost } from "./TimelinePost";
 import { Button } from "../design-system/components";
 
 type PublicProfileScreenProps = {
@@ -29,9 +33,11 @@ type PublicProfileScreenProps = {
   loadingPosts?: boolean;
   onBack: () => void;
   onOpenAchievement: (achievement: AchievementDef) => void;
+  onOpenPost: (post: RunPost) => void;
+  onOpenProfile: (address: `0x${string}`) => void;
 };
 
-function AchievementCard({
+function AchievementLogoTile({
   achievement,
   status,
   onOpen,
@@ -50,32 +56,27 @@ function AchievementCard({
   return (
     <button
       type="button"
-      className={`achievement-card achievement-card--button${
-        status === "claimed" ? " achievement-card--unlocked" : ""
+      className={`achievement-logo${
+        status === "claimed" ? " achievement-logo--unlocked" : ""
       }`}
       onClick={onOpen}
       aria-label={`${achievement.title}, ${label}. View detail`}
     >
       <img
-        className="achievement-card__art"
+        className="achievement-logo__art"
         src={achievement.image}
         alt=""
-        width={48}
-        height={48}
+        width={40}
+        height={40}
         decoding="async"
       />
-      <div className="achievement-card__body">
-        <h3 className="achievement-card__title">{achievement.title}</h3>
-        <p className="achievement-card__desc">{achievement.description}</p>
-      </div>
-      <span className="achievement-card__badge">{label}</span>
     </button>
   );
 }
 
 /**
  * Read-only profile of another runner.
- * No edit, staking, or claim actions — subjectAddress is display/query only.
+ * Compact achievement logos + personal run feed.
  */
 export function PublicProfileScreen({
   subjectAddress,
@@ -83,6 +84,8 @@ export function PublicProfileScreen({
   loadingPosts,
   onBack,
   onOpenAchievement,
+  onOpenPost,
+  onOpenProfile,
 }: PublicProfileScreenProps) {
   const { profile, isLoading } = useRunnerProfile(subjectAddress);
   const stats = getProfileStats(posts);
@@ -92,6 +95,20 @@ export function PublicProfileScreen({
       ? "Loading…"
       : displayName(profile, subjectAddress);
   const handleLabel = profile.exists ? formatHandle(profile.handle) : "";
+
+  const sortedPosts = useMemo(
+    () =>
+      [...posts].sort(
+        (a, b) =>
+          new Date(b.verifiedAt).getTime() - new Date(a.verifiedAt).getTime(),
+      ),
+    [posts],
+  );
+
+  const clubNames = useClubNamesByAddress(
+    useMemo(() => sortedPosts.map((p) => p.address), [sortedPosts]),
+  );
+  const { getClubRewardWei } = usePostsClubRewards(sortedPosts);
 
   const claimReads = useReadContracts({
     contracts: ACHIEVEMENTS.flatMap((a) => [
@@ -119,7 +136,10 @@ export function PublicProfileScreen({
   }).length;
 
   return (
-    <section className="profile-screen public-profile" aria-labelledby="public-profile-heading">
+    <section
+      className="profile-screen public-profile"
+      aria-labelledby="public-profile-heading"
+    >
       <header className="profile-screen__header public-profile__header">
         <Button variant="ghost" onClick={onBack}>
           Back
@@ -142,7 +162,9 @@ export function PublicProfileScreen({
           {handleLabel ? (
             <p className="profile-screen__handle">{handleLabel}</p>
           ) : null}
-          <p className="profile-screen__address">{formatAddress(subjectAddress)}</p>
+          <p className="profile-screen__address">
+            {formatAddress(subjectAddress)}
+          </p>
           {profile.exists && profile.bio ? (
             <p className="profile-screen__bio">{profile.bio}</p>
           ) : (
@@ -152,21 +174,6 @@ export function PublicProfileScreen({
           )}
         </div>
       </div>
-
-      {!hasRuns && !loadingPosts && (
-        <div className="profile-screen__empty">
-          <p className="profile-screen__empty-title">No public runs yet</p>
-          <p className="profile-screen__empty-body">
-            This runner hasn&apos;t published verified runs to the community feed.
-          </p>
-        </div>
-      )}
-
-      {loadingPosts && !hasRuns && (
-        <p className="profile-screen__bio profile-screen__bio--empty">
-          Loading runs…
-        </p>
-      )}
 
       <div className="profile-screen__stats" aria-label="Lifetime stats">
         <div className="profile-stat">
@@ -207,10 +214,10 @@ export function PublicProfileScreen({
             Achievements
           </h2>
           <span className="profile-screen__section-meta">
-            {claimedCount}/{ACHIEVEMENTS.length} NFTs
+            {claimedCount}/{ACHIEVEMENTS.length}
           </span>
         </div>
-        <div className="profile-screen__achievement-grid">
+        <div className="achievement-logo-grid" role="list">
           {ACHIEVEMENTS.map((a, i) => {
             const claimedRow = claimReads.data?.[i * 2];
             const eligibleRow = claimReads.data?.[i * 2 + 1];
@@ -220,15 +227,68 @@ export function PublicProfileScreen({
               eligibleRow?.status === "success" && Boolean(eligibleRow.result);
             const status = claimStatus(claimed, eligible);
             return (
-              <AchievementCard
-                key={a.id}
-                achievement={a}
-                status={status}
-                onOpen={() => onOpenAchievement(a)}
-              />
+              <div key={a.id} role="listitem">
+                <AchievementLogoTile
+                  achievement={a}
+                  status={status}
+                  onOpen={() => onOpenAchievement(a)}
+                />
+              </div>
             );
           })}
         </div>
+      </section>
+
+      <section
+        className="public-profile__feed"
+        aria-labelledby="public-feed-heading"
+      >
+        <div className="profile-screen__section-head">
+          <h2
+            id="public-feed-heading"
+            className="profile-screen__section-title"
+          >
+            Runs
+          </h2>
+          {hasRuns && (
+            <span className="profile-screen__section-meta">
+              {sortedPosts.length}
+            </span>
+          )}
+        </div>
+
+        {loadingPosts && !hasRuns && (
+          <p className="profile-screen__bio profile-screen__bio--empty">
+            Loading runs…
+          </p>
+        )}
+
+        {!hasRuns && !loadingPosts && (
+          <div className="profile-screen__empty">
+            <p className="profile-screen__empty-title">No public runs yet</p>
+            <p className="profile-screen__empty-body">
+              This runner hasn&apos;t published verified runs to the community
+              feed.
+            </p>
+          </div>
+        )}
+
+        {hasRuns && (
+          <ol className="public-profile__feed-list">
+            {sortedPosts.map((post) => (
+              <li key={post.id}>
+                <TimelinePost
+                  post={post}
+                  profile={profile}
+                  onOpen={onOpenPost}
+                  onOpenProfile={onOpenProfile}
+                  clubRewardWei={getClubRewardWei(post.runHash)}
+                  clubName={clubNames.get(post.address.toLowerCase())}
+                />
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
     </section>
   );

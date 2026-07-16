@@ -436,13 +436,13 @@ button {
   justify-content: center;
   gap: var(--space-2);
   min-height: 40px;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border: 0;
   border-radius: calc(var(--radius-md) - 2px);
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: var(--text-body-sm);
+  font-size: var(--text-caption);
   font-weight: var(--weight-medium);
   cursor: pointer;
 }
@@ -768,6 +768,17 @@ button {
 .timeline-post__meta {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline-post__meta-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .timeline-post__runner {
@@ -783,6 +794,16 @@ button {
   display: block;
   font-size: var(--text-caption);
   color: var(--color-text-muted);
+}
+
+.timeline-post__club {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12rem;
 }
 
 .timeline-post__badge {
@@ -1050,6 +1071,64 @@ button {
 
 .profile-screen__achievement-grid {
   display: grid;
+  gap: var(--space-3);
+}
+
+/* Public profile: logo-only 5-column grid (≈5×2 for first 10) */
+.achievement-logo-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-2);
+}
+
+.achievement-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  width: 100%;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  opacity: 0.45;
+  min-height: 44px;
+}
+
+.achievement-logo:hover {
+  background: var(--color-surface-raised);
+}
+
+.achievement-logo:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.achievement-logo--unlocked {
+  opacity: 1;
+  background: var(--color-primary-subtle);
+}
+
+.achievement-logo__art {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+  display: block;
+}
+
+.public-profile__feed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.public-profile__feed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
 }
 

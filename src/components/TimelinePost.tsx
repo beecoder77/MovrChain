@@ -20,6 +20,8 @@ type TimelinePostProps = {
   onOpenProfile?: (address: `0x${string}`) => void;
   /** Club treasury MOVR from claim (0 if none). */
   clubRewardWei?: bigint;
+  /** Club name when the runner belongs to a club. */
+  clubName?: string;
 };
 
 export function TimelinePost({
@@ -29,6 +31,7 @@ export function TimelinePost({
   onOpen,
   onOpenProfile,
   clubRewardWei = 0n,
+  clubName,
 }: TimelinePostProps) {
   let runnerLabel: string;
   if (isOwn) {
@@ -56,9 +59,14 @@ export function TimelinePost({
       />
       <div className="timeline-post__meta">
         <span className="timeline-post__runner">{runnerLabel}</span>
-        <time className="timeline-post__time" dateTime={post.verifiedAt}>
-          {formatTimeAgo(post.verifiedAt) || "Recently"}
-        </time>
+        <div className="timeline-post__meta-sub">
+          <time className="timeline-post__time" dateTime={post.verifiedAt}>
+            {formatTimeAgo(post.verifiedAt) || "Recently"}
+          </time>
+          {clubName ? (
+            <span className="timeline-post__club">{clubName}</span>
+          ) : null}
+        </div>
       </div>
     </>
   );

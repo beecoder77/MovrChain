@@ -263,6 +263,25 @@ export default function App() {
     );
   }
 
+  if (detailPost) {
+    const isOwn =
+      detailPost.address.toLowerCase() === address.toLowerCase();
+    return (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+      >
+        <RunDetailScreen
+          post={detailPost}
+          isOwn={isOwn}
+          onBack={() => setDetailPost(null)}
+          onOpenProfile={openRunnerProfile}
+        />
+      </AppShell>
+    );
+  }
+
   if (viewedProfile) {
     return (
       <AppShell
@@ -282,6 +301,8 @@ export default function App() {
               viewOnly: true,
             })
           }
+          onOpenPost={setDetailPost}
+          onOpenProfile={openRunnerProfile}
         />
       </AppShell>
     );
@@ -298,25 +319,6 @@ export default function App() {
           address={address}
           clubId={openClubId}
           onBack={() => setOpenClubId(null)}
-          onOpenProfile={openRunnerProfile}
-        />
-      </AppShell>
-    );
-  }
-
-  if (detailPost) {
-    const isOwn =
-      detailPost.address.toLowerCase() === address.toLowerCase();
-    return (
-      <AppShell
-        brand="MovrChain"
-        headerRight={<WalletChip address={address} connected />}
-        onBrandClick={goToFeed}
-      >
-        <RunDetailScreen
-          post={detailPost}
-          isOwn={isOwn}
-          onBack={() => setDetailPost(null)}
           onOpenProfile={openRunnerProfile}
         />
       </AppShell>
@@ -341,6 +343,7 @@ export default function App() {
           onLogRun={startLogRun}
           onOpenPost={setDetailPost}
           onOpenProfile={openRunnerProfile}
+          onOpenClubsTab={() => setTab("clubs")}
         />
       )}
       {tab === "clubs" && (

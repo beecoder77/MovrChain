@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { RunPost } from "../lib/posts";
 import { usePostsClubRewards } from "../lib/runRewards";
 import { useRunnerProfile } from "../lib/useRunnerProfile";
+import { useClubNamesByAddress, useMyClubRoster } from "../lib/useClubFeed";
 import { TimelinePost } from "./TimelinePost";
 import { Button } from "../design-system/components";
 
-type FeedTab = "yours" | "community";
+type FeedTab = "yours" | "community" | "club";
 
 type FeedScreenProps = {
   yourPosts: RunPost[];
@@ -15,6 +16,7 @@ type FeedScreenProps = {
   onLogRun: () => void;
   onOpenPost: (post: RunPost) => void;
   onOpenProfile: (address: `0x${string}`) => void;
+  onOpenClubsTab?: () => void;
 };
 
 function CommunityPost({
@@ -22,11 +24,13 @@ function CommunityPost({
   onOpen,
   onOpenProfile,
   clubRewardWei,
+  clubName,
 }: {
   post: RunPost;
   onOpen: (post: RunPost) => void;
   onOpenProfile: (address: `0x${string}`) => void;
   clubRewardWei: bigint;
+  clubName?: string;
 }) {
   const { profile } = useRunnerProfile(post.address as `0x${string}`);
   return (
@@ -36,6 +40,7 @@ function CommunityPost({
       onOpen={onOpen}
       onOpenProfile={onOpenProfile}
       clubRewardWei={clubRewardWei}
+      clubName={clubName}
     />
   );
 }
@@ -48,26 +53,74 @@ export function FeedScreen({
   onLogRun,
   onOpenPost,
   onOpenProfile,
+  onOpenClubsTab,
 }: FeedScreenProps) {
   const [tab, setTab] = useState<FeedTab>("yours");
   const { profile: ownProfile } = useRunnerProfile(address);
+  const roster = useMyClubRoster(address);
 
-  const list = tab === "yours" ? yourPosts : communityPosts;
+  const clubPosts = useMemo(() => {
+    if (!roster.inClub) return [];
+    const byId = new Map<string, RunPost>();
+    for (const post of [...yourPosts, ...communityPosts]) {
+      if (!roster.memberSet.has(post.address.toLowerCase())) continue;
+      byId.set(post.id, post);
+    }
+    return [...byId.values()].sort(
+      (a, b) =>
+        new Date(b.verifiedAt).getTime() - new Date(a.verifiedAt).getTime(),
+    );
+  }, [roster.inClub, roster.memberSet, yourPosts, communityPosts]);
+
+  const list =
+    tab === "yours"
+      ? yourPosts
+      : tab === "community"
+        ? communityPosts
+        : clubPosts;
+
+  const feedAddresses = useMemo(
+    () => list.map((p) => p.address),
+    [list],
+  );
+  const clubNames = useClubNamesByAddress(feedAddresses);
   const { getClubRewardWei } = usePostsClubRewards(list);
+
   const empty =
     !loading && list.length === 0
       ? tab === "yours"
         ? {
             title: "Your Run Feed is empty",
             body: "Import a GPX and verify on Monad. Attestation publishes here under your wallet and to Community.",
-            cta: true,
+            cta: "log" as const,
           }
-        : {
-            title: "Community Feed is empty",
-            body: "When runners verify on Monad, their runs show up here for everyone.",
-            cta: false,
-          }
+        : tab === "community"
+          ? {
+              title: "Community Feed is empty",
+              body: "When runners verify on Monad, their runs show up here for everyone.",
+              cta: null,
+            }
+          : !roster.inClub
+            ? {
+                title: "No club yet",
+                body: "Join or create a club to see clubmate runs here.",
+                cta: "clubs" as const,
+              }
+            : {
+                title: "Club feed is quiet",
+                body: roster.clubName
+                  ? `No verified runs from ${roster.clubName} yet. Log a run and show the squad.`
+                  : "No verified runs from your clubmates yet.",
+                cta: "log" as const,
+              }
       : null;
+
+  const tabLabelId =
+    tab === "yours"
+      ? "tab-yours"
+      : tab === "community"
+        ? "tab-community"
+        : "tab-club";
 
   return (
     <section className="feed-screen" aria-labelledby="feed-heading">
@@ -76,8 +129,8 @@ export function FeedScreen({
           Activity
         </h1>
         <p className="feed-screen__sub">
-          Your runs stay under your wallet. Community is the public board. Tap a
-          name to open a runner, or a run for the route map.
+          Your runs, the public board, and your club. Tap a name for a runner,
+          or a run for the route map.
         </p>
 
         <div className="feed-tabs" role="tablist" aria-label="Feed type">
@@ -109,13 +162,27 @@ export function FeedScreen({
               <span className="feed-tabs__count">{communityPosts.length}</span>
             )}
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-club"
+            aria-selected={tab === "club"}
+            aria-controls="feed-panel"
+            className={`feed-tabs__tab${tab === "club" ? " feed-tabs__tab--active" : ""}`}
+            onClick={() => setTab("club")}
+          >
+            Club
+            {roster.inClub && clubPosts.length > 0 && (
+              <span className="feed-tabs__count">{clubPosts.length}</span>
+            )}
+          </button>
         </div>
       </div>
 
       <div
         id="feed-panel"
         role="tabpanel"
-        aria-labelledby={tab === "yours" ? "tab-yours" : "tab-community"}
+        aria-labelledby={tabLabelId}
         className="feed-screen__panel"
       >
         {loading && list.length === 0 && (
@@ -126,8 +193,11 @@ export function FeedScreen({
           <div className="feed-screen__empty">
             <p className="feed-screen__empty-title">{empty.title}</p>
             <p className="feed-screen__empty-body">{empty.body}</p>
-            {empty.cta && (
+            {empty.cta === "log" && (
               <Button onClick={onLogRun}>Log your first run</Button>
+            )}
+            {empty.cta === "clubs" && onOpenClubsTab && (
+              <Button onClick={onOpenClubsTab}>Browse clubs</Button>
             )}
           </div>
         )}
@@ -144,16 +214,18 @@ export function FeedScreen({
                       onOpen={onOpenPost}
                       onOpenProfile={onOpenProfile}
                       clubRewardWei={getClubRewardWei(post.runHash)}
+                      clubName={clubNames.get(post.address.toLowerCase())}
                     />
                   </li>
                 ))
-              : communityPosts.map((post) => (
+              : list.map((post) => (
                   <li key={post.id}>
                     <CommunityPost
                       post={post}
                       onOpen={onOpenPost}
                       onOpenProfile={onOpenProfile}
                       clubRewardWei={getClubRewardWei(post.runHash)}
+                      clubName={clubNames.get(post.address.toLowerCase())}
                     />
                   </li>
                 ))}
