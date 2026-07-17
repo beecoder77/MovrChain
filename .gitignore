@@ -19,6 +19,7 @@ contracts/.env.*
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+contracts/*-standard-input.json
 contracts/metadata/*.uri.txt
 contracts/metadata/uris.env
 
