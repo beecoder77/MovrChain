@@ -47,6 +47,7 @@ import {
 } from "../lib/profile";
 import { EXPLORER_URL } from "../lib/wagmi";
 import { refetchAfterTx } from "../lib/refetchAfterTx";
+import { useAfterConfirmedTx } from "../lib/useAfterConfirmedTx";
 import { Alert, Button } from "../design-system/components";
 import {
   usePublicClient,
@@ -67,12 +68,10 @@ type ClubsScreenProps = {
 
 export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
   const queryClient = useQueryClient();
-  const handledTx = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [isPublicCreate, setIsPublicCreate] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const deployed = CLUB_REGISTRY !== zeroAddress;
 
   const { data: clubIdRaw, refetch: refetchClubOf } = useReadContract({
@@ -115,7 +114,6 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
   } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 
@@ -129,50 +127,30 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
       );
   }, [error, receiptFailed, receiptError, receipt?.status]);
 
-  useEffect(() => {
-    if (!isSuccess || !txHash || receipt?.status === "reverted") return;
-    if (handledTx.current === txHash) return;
-    handledTx.current = txHash;
-
-    let cancelled = false;
-    void (async () => {
-      setSyncing(true);
-      try {
-        await refetchAfterTx(
-          [
-            () => refetchClubOf(),
-            () => refetchClub(),
-            () => refetchLeaderboard(),
-          ],
-          {
-            queryClient,
-            until: async () => {
-              const r = await refetchClubOf();
-              return Number((r.data as bigint | undefined) ?? 0n) > 0;
-            },
-          },
-        );
-        if (cancelled) return;
-        setName("");
-        setCreateOpen(false);
-        setWarning(null);
-      } finally {
-        if (!cancelled) setSyncing(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isSuccess,
+  const syncing = useAfterConfirmedTx(
     txHash,
-    receipt,
-    queryClient,
-    refetchClubOf,
-    refetchClub,
-    refetchLeaderboard,
-  ]);
+    isSuccess,
+    receipt?.status === "reverted",
+    async () => {
+      await refetchAfterTx(
+        [
+          () => refetchClubOf(),
+          () => refetchClub(),
+          () => refetchLeaderboard(),
+        ],
+        {
+          queryClient,
+          until: async () => {
+            const r = await refetchClubOf();
+            return Number((r.data as bigint | undefined) ?? 0n) > 0;
+          },
+        },
+      );
+      setName("");
+      setCreateOpen(false);
+      setWarning(null);
+    },
+  );
 
   const busy = isPending || confirming || syncing;
   const inClub = clubId > 0n;
@@ -426,7 +404,6 @@ export function ClubDetailScreen({
   onOpenProfile,
 }: ClubDetailProps) {
   const queryClient = useQueryClient();
-  const handledTx = useRef<string | null>(null);
   const [invite, setInvite] = useState("");
   const [title, setTitle] = useState("");
   const [reason, setReason] = useState("");
@@ -434,7 +411,6 @@ export function ClubDetailScreen({
   const [donateAmount, setDonateAmount] = useState("5");
   const [proposeOpen, setProposeOpen] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const pendingDonateAction = useRef<"approve" | "donate" | null>(null);
   const publicClient = usePublicClient({ chainId: monadTestnet.id });
 
@@ -742,7 +718,6 @@ export function ClubDetailScreen({
   } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 
@@ -756,81 +731,43 @@ export function ClubDetailScreen({
       );
   }, [error, receiptFailed, receiptError, receipt?.status]);
 
-  useEffect(() => {
-    if (!isSuccess || !txHash || receipt?.status === "reverted") return;
-    if (handledTx.current === txHash) return;
-    handledTx.current = txHash;
-
-    let cancelled = false;
-    void (async () => {
-      setSyncing(true);
-      try {
-        await refetchAfterTx(
-          [
-            () => refetchClub(),
-            () => refetchMembers(),
-            () => refetchBal(),
-            () => refetchProps(),
-            () => refetchLatest(),
-            () => refetchHasVoted(),
-            () => refetchCanExecute(),
-            () => refetchVotingClosed(),
-            () => refetchTopDonors(),
-            () => donationReads.refetch(),
-            () => refetchMyDonated(),
-            () => refetchAllowance(),
-            () => refetchManager(),
-            () => refetchChallenges(),
-            () => adminReads.refetch(),
-            () => refetchViewerClubOf(),
-            () => refetchJoinPending(),
-            () => refetchApplicants(),
-            () => applicantProfiles.refetch(),
-          ],
-          {
-            queryClient,
-          },
-        );
-        if (cancelled) return;
-        if (pendingDonateAction.current === "donate") {
-          setDonateAmount("5");
-        }
-        pendingDonateAction.current = null;
-        setProposeOpen(false);
-        setWarning(null);
-      } finally {
-        if (!cancelled) setSyncing(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isSuccess,
+  const syncing = useAfterConfirmedTx(
     txHash,
-    receipt,
-    queryClient,
-    refetchClub,
-    refetchMembers,
-    refetchBal,
-    refetchProps,
-    refetchLatest,
-    refetchHasVoted,
-    refetchCanExecute,
-    refetchVotingClosed,
-    refetchTopDonors,
-    donationReads,
-    refetchMyDonated,
-    refetchAllowance,
-    refetchManager,
-    refetchChallenges,
-    adminReads,
-    refetchViewerClubOf,
-    refetchJoinPending,
-    refetchApplicants,
-    applicantProfiles,
-  ]);
+    isSuccess,
+    receipt?.status === "reverted",
+    async () => {
+      await refetchAfterTx(
+        [
+          () => refetchClub(),
+          () => refetchMembers(),
+          () => refetchBal(),
+          () => refetchProps(),
+          () => refetchLatest(),
+          () => refetchHasVoted(),
+          () => refetchCanExecute(),
+          () => refetchVotingClosed(),
+          () => refetchTopDonors(),
+          () => donationReads.refetch(),
+          () => refetchMyDonated(),
+          () => refetchAllowance(),
+          () => refetchManager(),
+          () => refetchChallenges(),
+          () => adminReads.refetch(),
+          () => refetchViewerClubOf(),
+          () => refetchJoinPending(),
+          () => refetchApplicants(),
+          () => applicantProfiles.refetch(),
+        ],
+        { queryClient },
+      );
+      if (pendingDonateAction.current === "donate") {
+        setDonateAmount("5");
+      }
+      pendingDonateAction.current = null;
+      setProposeOpen(false);
+      setWarning(null);
+    },
+  );
 
   const busy = isPending || confirming || syncing;
 

@@ -119,7 +119,6 @@ export function VerifyClaim({
   } = useWaitForTransactionReceipt({
     hash: attestTxHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 
@@ -139,7 +138,6 @@ export function VerifyClaim({
   } = useWaitForTransactionReceipt({
     hash: publishTxHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 
@@ -159,7 +157,6 @@ export function VerifyClaim({
   } = useWaitForTransactionReceipt({
     hash: claimTxHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 

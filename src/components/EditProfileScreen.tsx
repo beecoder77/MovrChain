@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useReadContract,
   useWriteContract,
@@ -11,6 +11,7 @@ import { Alert, Button } from "../design-system/components";
 import { formatWalletError } from "../lib/errors";
 import { EXPLORER_URL } from "../lib/wagmi";
 import { refetchAfterTx } from "../lib/refetchAfterTx";
+import { useAfterConfirmedTx } from "../lib/useAfterConfirmedTx";
 import {
   AVATARS,
   MAX_BIO_LEN,
@@ -37,7 +38,6 @@ export function EditProfileScreen({
   onSaved,
 }: EditProfileScreenProps) {
   const queryClient = useQueryClient();
-  const handledTx = useRef<string | null>(null);
 
   const { profile: chainProfile, isLoading, refetch } = useRunnerProfile(address);
 
@@ -47,7 +47,6 @@ export function EditProfileScreen({
   const [avatarId, setAvatarId] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (isLoading || hydrated) return;
@@ -96,37 +95,27 @@ export function EditProfileScreen({
   } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 
+  const syncing = useAfterConfirmedTx(
+    txHash,
+    isSuccess,
+    receipt?.status === "reverted",
+    async () => {
+      await refetchAfterTx([() => refetch()], { queryClient });
+      onSaved();
+    },
+  );
+
   useEffect(() => {
     if (!isSuccess || !txHash || !receipt) return;
-    if (handledTx.current === txHash) return;
-    handledTx.current = txHash;
-
     if (receipt.status === "reverted") {
       setLocalError(
         "Transaction reverted on Monad (handle taken or invalid). Try again.",
       );
-      return;
     }
-
-    let cancelled = false;
-    void (async () => {
-      setSyncing(true);
-      try {
-        await refetchAfterTx([() => refetch()], { queryClient });
-        if (!cancelled) onSaved();
-      } finally {
-        if (!cancelled) setSyncing(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isSuccess, txHash, receipt, onSaved, refetch, queryClient]);
+  }, [isSuccess, txHash, receipt]);
 
   useEffect(() => {
     if (!receiptError) return;
@@ -143,7 +132,6 @@ export function EditProfileScreen({
 
   const handleSave = () => {
     setLocalError(null);
-    handledTx.current = null;
     reset();
 
     const handleMsg = validateHandleInput(handle);

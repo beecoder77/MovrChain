@@ -11,31 +11,24 @@ export type RefetchAfterTxOptions = {
   attempts?: number;
   /** Stop early when this returns true (after a refetch round). */
   until?: () => boolean | Promise<boolean>;
-  /** Invalidate wagmi read caches so other screens pick up new state. */
+  /** Soft-invalidate wagmi reads after local refetches (non-blocking). */
   queryClient?: QueryClient;
 };
 
 /**
- * After a confirmed write on Monad, eth_call can still return pre-tx state for
- * a short window (async execution). One immediate refetch often looks "stuck"
- * until a hard refresh. Delay + retry (and optional until) fixes that.
+ * After a confirmed write on Monad, eth_call can briefly return pre-tx state.
+ * Delay + targeted refetch (optional until) updates the screen without a refresh.
+ *
+ * Important: do NOT invalidate the entire read cache before refetching — that
+ * reshuffles hook identities mid-flight and can leave busy/syncing stuck true.
  */
 export async function refetchAfterTx(
   fns: Array<() => unknown>,
   opts: RefetchAfterTxOptions = {},
 ): Promise<void> {
-  const delayMs = opts.delayMs ?? 900;
-  const gapMs = opts.gapMs ?? 1_100;
-  const attempts = opts.attempts ?? (opts.until ? 5 : 1);
-
-  if (opts.queryClient) {
-    await opts.queryClient.invalidateQueries({
-      predicate: (q) => {
-        const head = q.queryKey[0];
-        return head === "readContract" || head === "readContracts";
-      },
-    });
-  }
+  const delayMs = opts.delayMs ?? 600;
+  const gapMs = opts.gapMs ?? 900;
+  const attempts = opts.attempts ?? (opts.until ? 4 : 1);
 
   await sleep(delayMs);
 
@@ -43,12 +36,20 @@ export async function refetchAfterTx(
     await Promise.all(
       fns.map((fn) => Promise.resolve(fn()).catch(() => undefined)),
     );
-    if (opts.until && (await opts.until())) return;
+    if (opts.until && (await opts.until())) break;
     if (i < attempts - 1) await sleep(gapMs);
   }
 
-  // Most writes need only one delayed round. Keep a non-blocking safety pass
-  // for RPC replicas that were still behind, without holding the UI disabled.
+  if (opts.queryClient) {
+    void opts.queryClient.invalidateQueries({
+      predicate: (q) => {
+        const head = q.queryKey[0];
+        return head === "readContract" || head === "readContracts";
+      },
+    });
+  }
+
+  // Non-blocking safety pass for lagging replicas — does not hold the UI.
   if (!opts.until) {
     void sleep(gapMs).then(() =>
       Promise.all(

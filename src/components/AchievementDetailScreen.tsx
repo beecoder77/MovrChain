@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { zeroAddress } from "viem";
 import {
   useReadContract,
@@ -29,6 +29,7 @@ import {
 import { CONTRACT_ADDRESS, MOVR_CHAIN_ABI } from "../lib/chain";
 import { formatWalletError } from "../lib/errors";
 import { refetchAfterTx } from "../lib/refetchAfterTx";
+import { useAfterConfirmedTx } from "../lib/useAfterConfirmedTx";
 import { Alert, Button } from "../design-system/components";
 
 type AchievementDetailScreenProps = {
@@ -47,9 +48,7 @@ export function AchievementDetailScreen({
   onBack,
 }: AchievementDetailScreenProps) {
   const queryClient = useQueryClient();
-  const handledTx = useRef<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const isClub = isClubAchievement(achievement);
   const badgeId = achievement.clubBadgeId ?? 0;
   const chainId = BigInt(achievement.chainId);
@@ -189,12 +188,39 @@ export function AchievementDetailScreen({
   } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: monadTestnet.id,
-    confirmations: 2,
     pollingInterval: 1_000,
   });
 
-  const busy = isPending || confirming || syncing;
   const receiptReverted = receipt?.status === "reverted";
+
+  const syncing = useAfterConfirmedTx(
+    txHash,
+    isSuccess,
+    receiptReverted,
+    async () => {
+      const fns = isClub
+        ? [() => refetchClaimedClub(), () => refetchEligibleClub()]
+        : [
+            () => refetchClaimedRun(),
+            () => refetchEligibleRun(),
+            () => refetchStats(),
+          ];
+      await refetchAfterTx(fns, {
+        queryClient,
+        until: async () => {
+          if (isClub) {
+            const r = await refetchClaimedClub();
+            return Boolean(r.data);
+          }
+          const r = await refetchClaimedRun();
+          return Boolean(r.data);
+        },
+      });
+      setWarning(null);
+    },
+  );
+
+  const busy = isPending || confirming || syncing;
 
   useEffect(() => {
     if (writeError) setWarning(formatWalletError(writeError));
@@ -203,55 +229,6 @@ export function AchievementDetailScreen({
         formatWalletError(receiptError ?? new Error("Claim failed on Monad")),
       );
   }, [writeError, receiptFailed, receiptError, receiptReverted]);
-
-  useEffect(() => {
-    if (!isSuccess || receiptReverted || !txHash) return;
-    if (handledTx.current === txHash) return;
-    handledTx.current = txHash;
-
-    let cancelled = false;
-    void (async () => {
-      setSyncing(true);
-      try {
-        const fns = isClub
-          ? [() => refetchClaimedClub(), () => refetchEligibleClub()]
-          : [
-              () => refetchClaimedRun(),
-              () => refetchEligibleRun(),
-              () => refetchStats(),
-            ];
-        await refetchAfterTx(fns, {
-          queryClient,
-          until: async () => {
-            if (isClub) {
-              const r = await refetchClaimedClub();
-              return Boolean(r.data);
-            }
-            const r = await refetchClaimedRun();
-            return Boolean(r.data);
-          },
-        });
-        if (!cancelled) setWarning(null);
-      } finally {
-        if (!cancelled) setSyncing(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isSuccess,
-    receiptReverted,
-    txHash,
-    isClub,
-    queryClient,
-    refetchClaimedClub,
-    refetchEligibleClub,
-    refetchClaimedRun,
-    refetchEligibleRun,
-    refetchStats,
-  ]);
 
   const handleClaim = () => {
     if (!canClaim) {
