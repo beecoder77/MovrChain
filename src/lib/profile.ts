@@ -81,7 +81,8 @@ export const MIN_HANDLE_LEN = 3;
 export const MAX_HANDLE_LEN = 16;
 
 /** Monad gas estimates often under-count string storage — pin a safe ceiling */
-export const SET_PROFILE_GAS = 450_000n;
+/** Monad charges gas_limit; string SSTOREs are cold-access heavy — keep headroom. */
+export const SET_PROFILE_GAS = 1_200_000n;
 
 export const DEFAULT_PROFILE: OnChainProfile = {
   handle: "",
@@ -131,56 +132,66 @@ export function formatHandle(handle: string | undefined): string {
 export function parseProfile(data: unknown): OnChainProfile {
   if (data == null) return DEFAULT_PROFILE;
 
-  let handle = "";
-  let name = "";
-  let bio = "";
-  let avatarId = 0;
-  let updatedAt = 0n;
-  let exists = false;
-
+  let parsed: OnChainProfile | null = null;
   if (Array.isArray(data)) {
-    handle = String(data[0] ?? "");
-    name = String(data[1] ?? "");
-    bio = String(data[2] ?? "");
-    avatarId = Number(data[3] ?? 0);
-    updatedAt = toBigInt(data[4]);
-    exists = Boolean(data[5]);
+    parsed = parseProfileTuple(data);
   } else if (typeof data === "object") {
-    const d = data as Record<string, unknown>;
-    const hasShape =
-      "name" in d ||
-      "handle" in d ||
-      "exists" in d ||
-      "avatarId" in d ||
-      0 in d ||
-      "0" in d;
-    if (!hasShape) return DEFAULT_PROFILE;
+    parsed = parseProfileObject(data as Record<string, unknown>);
+  }
+  if (!parsed) return DEFAULT_PROFILE;
 
-    // New ABI: handle, name, bio, avatarId, updatedAt, exists
-    if ("handle" in d || (Array.isArray(d) === false && "0" in d && "1" in d && "5" in d)) {
-      handle = String(d.handle ?? d[0] ?? d["0"] ?? "");
-      name = String(d.name ?? d[1] ?? d["1"] ?? "");
-      bio = String(d.bio ?? d[2] ?? d["2"] ?? "");
-      avatarId = Number(d.avatarId ?? d[3] ?? d["3"] ?? 0);
-      updatedAt = toBigInt(d.updatedAt ?? d[4] ?? d["4"]);
-      exists = Boolean(d.exists ?? d[5] ?? d["5"]);
-    } else {
-      // Legacy ABI fallback (name, bio, avatarId, updatedAt, exists)
-      name = String(d.name ?? d[0] ?? d["0"] ?? "");
-      bio = String(d.bio ?? d[1] ?? d["1"] ?? "");
-      avatarId = Number(d.avatarId ?? d[2] ?? d["2"] ?? 0);
-      updatedAt = toBigInt(d.updatedAt ?? d[3] ?? d["3"]);
-      exists = Boolean(d.exists ?? d[4] ?? d["4"]);
+  const exists =
+    parsed.exists ||
+    parsed.name.trim().length > 0 ||
+    parsed.handle.trim().length > 0 ||
+    parsed.updatedAt > 0n;
+
+  return { ...parsed, exists };
+}
+
+/** New ABI has 6 fields (handle first); legacy pre-handle ABI had 5. */
+function parseProfileTuple(data: unknown[]): OnChainProfile {
+  const isNew = data.length >= 6;
+  const offset = isNew ? 1 : 0;
+  return {
+    handle: isNew ? sanitizeText(data[0]) : "",
+    name: sanitizeText(data[offset]),
+    bio: sanitizeText(data[offset + 1]),
+    avatarId: Number(data[offset + 2] ?? 0),
+    updatedAt: toBigInt(data[offset + 3]),
+    exists: Boolean(data[offset + 4]),
+  };
+}
+
+function parseProfileObject(d: Record<string, unknown>): OnChainProfile | null {
+  // Named result from viem (getProfile returns named outputs).
+  if ("handle" in d || "name" in d || "exists" in d || "avatarId" in d) {
+    return {
+      handle: sanitizeText(d.handle),
+      name: sanitizeText(d.name),
+      bio: sanitizeText(d.bio),
+      avatarId: Number(d.avatarId ?? 0),
+      updatedAt: toBigInt(d.updatedAt),
+      exists: Boolean(d.exists),
+    };
+  }
+  // Array-like Result with numeric keys — normalize to a tuple and reuse.
+  if ("0" in d) {
+    const tuple: unknown[] = [];
+    for (let i = 0; i in d || String(i) in d; i += 1) {
+      tuple.push(d[i] ?? d[String(i)]);
     }
-  } else {
-    return DEFAULT_PROFILE;
+    return parseProfileTuple(tuple);
   }
+  return null;
+}
 
-  if (!exists && (name.trim().length > 0 || handle.trim().length > 0 || updatedAt > 0n)) {
-    exists = true;
+/** Coerce ABI string field and strip null bytes from mis-decoded legacy data. */
+function sanitizeText(value: unknown): string {
+  if (typeof value !== "string") {
+    return value == null ? "" : `${value as string | number | bigint}`;
   }
-
-  return { handle, name, bio, avatarId, updatedAt, exists };
+  return value.replaceAll("\u0000", "").trimEnd();
 }
 
 function toBigInt(value: unknown): bigint {

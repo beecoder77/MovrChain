@@ -85,6 +85,25 @@ function mapKnownFailure(combined: string): string | null {
   if (combined.includes("out of gas") || combined.includes("intrinsic gas too low")) {
     return "Transaction ran out of gas on Monad. Retry — the gas limit was too low for this write (unused gas is refunded, so a higher limit does not raise the fee by itself).";
   }
+  if (combined.includes("handle taken")) {
+    return "That handle is already taken. Pick another unique @handle.";
+  }
+  if (
+    combined.includes('"handle"') ||
+    combined.includes("revert handle") ||
+    (combined.includes("handle") && combined.includes("revert"))
+  ) {
+    return "Invalid handle. Use 3–16 characters: start with a letter, then letters, numbers, or _.";
+  }
+  if (combined.includes('"name"') || combined.includes("revert name")) {
+    return "Display name is required and must be 32 characters or fewer.";
+  }
+  if (combined.includes('"bio"') || combined.includes("revert bio")) {
+    return "Bio must be 160 characters or fewer.";
+  }
+  if (combined.includes('"avatar"') || combined.includes("revert avatar")) {
+    return "Pick a valid avatar from the list.";
+  }
   if (combined.includes("voted")) {
     return "You already voted on this proposal.";
   }
@@ -99,7 +118,7 @@ function mapKnownFailure(combined: string): string | null {
     combined.includes("revert") ||
     combined.includes("transaction failed")
   ) {
-    return "Attestation failed on Monad. Check gas/network and try again.";
+    return "Transaction failed on Monad. Check gas, handle availability, and try again.";
   }
 
   return null;

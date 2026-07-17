@@ -87,7 +87,7 @@ export function PublicProfileScreen({
   onOpenPost,
   onOpenProfile,
 }: PublicProfileScreenProps) {
-  const { profile, isLoading } = useRunnerProfile(subjectAddress);
+  const { profile, isLoading, isError, refetch } = useRunnerProfile(subjectAddress);
   const stats = getProfileStats(posts);
   const hasRuns = posts.length > 0;
   const name =
@@ -169,11 +169,21 @@ export function PublicProfileScreen({
             <p className="profile-screen__bio">{profile.bio}</p>
           ) : (
             <p className="profile-screen__bio profile-screen__bio--empty">
-              {isLoading ? "Loading profile from Monad…" : "No bio yet."}
+              {isLoading
+                ? "Loading profile from Monad…"
+                : isError
+                  ? "Profile RPC timed out. Tap Retry, or continue anyway."
+                  : "No bio yet."}
             </p>
           )}
         </div>
       </div>
+
+      {isError && (
+        <Button variant="secondary" block onClick={() => refetch()}>
+          Retry profile load
+        </Button>
+      )}
 
       <div className="profile-screen__stats" aria-label="Lifetime stats">
         <div className="profile-stat">

@@ -1,17 +1,14 @@
-import { createConfig, http } from "wagmi";
+import { createConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { monadTestnet } from "viem/chains";
+import { monadTransport } from "./monadClient";
 
 export const wagmiConfig = createConfig({
   chains: [monadTestnet],
   connectors: [injected({ shimDisconnect: true })],
   transports: {
-    [monadTestnet.id]: http("https://testnet-rpc.monad.xyz", {
-      batch: true,
-      retryCount: 3,
-    }),
+    [monadTestnet.id]: monadTransport,
   },
-  // Persist + reconnect wallet so getProfile runs again after refresh
   multiInjectedProviderDiscovery: true,
 });
 

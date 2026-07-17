@@ -93,7 +93,7 @@ export function ProfileScreen({
   onOpenClubsTab,
 }: ProfileScreenProps) {
   const { disconnect } = useDisconnect();
-  const { profile, isLoading } = useRunnerProfile(address);
+  const { profile, isLoading, isError, refetch } = useRunnerProfile(address);
   const clubsLive = CLUB_REGISTRY !== zeroAddress;
   const badgesLive = CLUB_BADGE_NFT !== zeroAddress;
 
@@ -220,11 +220,19 @@ export function ProfileScreen({
             <p className="profile-screen__bio profile-screen__bio--empty">
               {isLoading
                 ? "Loading profile from Monad…"
-                : "Add a bio so the feed knows who\u2019s logging miles."}
+                : isError
+                  ? "Profile RPC timed out. You can still set up your profile — tap Retry or Set up profile."
+                  : "Add a bio so the feed knows who\u2019s logging miles."}
             </p>
           )}
         </div>
       </div>
+
+      {isError && (
+        <Button variant="secondary" block onClick={() => refetch()}>
+          Retry profile load
+        </Button>
+      )}
 
       <Button variant="secondary" block onClick={onEditProfile}>
         {profile.exists ? "Edit profile" : "Set up profile"}

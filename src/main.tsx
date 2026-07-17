@@ -9,10 +9,11 @@ import "./styles/global.css";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 0,
-      refetchOnMount: "always",
-      refetchOnReconnect: "always",
+      staleTime: 4_000,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
       refetchOnWindowFocus: true,
+      retry: 2,
     },
   },
 });

@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useConnect } from "wagmi";
+import { useAccount, useConnect, useSwitchChain } from "wagmi";
+import { monadTestnet } from "viem/chains";
 import { Button, Alert } from "../design-system/components";
 import { formatWalletError } from "../lib/errors";
 
 export function ConnectScreen() {
   const { connect, connectors, isPending } = useConnect();
+  const { switchChainAsync } = useSwitchChain();
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const handleConnect = () => {
@@ -18,10 +20,15 @@ export function ConnectScreen() {
     }
 
     connect(
-      { connector },
+      { connector, chainId: monadTestnet.id },
       {
         onError: (err) => {
           setConnectError(formatWalletError(err) ?? "Could not connect wallet.");
+        },
+        onSuccess: () => {
+          void switchChainAsync({ chainId: monadTestnet.id }).catch(() => {
+            /* already on Monad or user rejected — NetworkGate handles it */
+          });
         },
       },
     );
@@ -64,6 +71,41 @@ export function ConnectScreen() {
         <p className="connect-screen__footnote">
           Fitness product first — wallet unlocks verify &amp; rewards, not speculation.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** Soft gate when connected wallet is not on Monad testnet. */
+export function MonadNetworkGate({ children }: { children: React.ReactNode }) {
+  const { isConnected, chainId } = useAccount();
+  const { switchChain, isPending, error } = useSwitchChain();
+
+  const wrong = isConnected && chainId !== undefined && chainId !== monadTestnet.id;
+
+  if (!wrong) return <>{children}</>;
+
+  return (
+    <div className="connect-screen">
+      <div className="connect-screen__content">
+        <h1 className="connect-screen__title">Switch to Monad Testnet</h1>
+        <p className="connect-screen__lead">
+          MovrChain reads and writes on Monad testnet (chain {monadTestnet.id}).
+          Your wallet is on another network.
+        </p>
+        {error && (
+          <Alert className="connect-screen__alert">
+            {formatWalletError(error) ?? "Could not switch network."}
+          </Alert>
+        )}
+        <Button
+          block
+          loading={isPending}
+          disabled={isPending}
+          onClick={() => switchChain({ chainId: monadTestnet.id })}
+        >
+          {isPending ? "Switching…" : "Switch to Monad Testnet"}
+        </Button>
       </div>
     </div>
   );

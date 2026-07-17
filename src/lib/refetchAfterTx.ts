@@ -11,16 +11,16 @@ export type RefetchAfterTxOptions = {
   attempts?: number;
   /** Stop early when this returns true (after a refetch round). */
   until?: () => boolean | Promise<boolean>;
-  /** Soft-invalidate wagmi reads after local refetches (non-blocking). */
+  /**
+   * Optional query client — only used for a narrow, deferred soft-touch.
+   * Never wipe the entire read cache synchronously (that stalled profile loads).
+   */
   queryClient?: QueryClient;
 };
 
 /**
  * After a confirmed write on Monad, eth_call can briefly return pre-tx state.
- * Delay + targeted refetch (optional until) updates the screen without a refresh.
- *
- * Important: do NOT invalidate the entire read cache before refetching — that
- * reshuffles hook identities mid-flight and can leave busy/syncing stuck true.
+ * Delay + targeted refetch updates the current screen without a hard refresh.
  */
 export async function refetchAfterTx(
   fns: Array<() => unknown>,
@@ -38,15 +38,6 @@ export async function refetchAfterTx(
     );
     if (opts.until && (await opts.until())) break;
     if (i < attempts - 1) await sleep(gapMs);
-  }
-
-  if (opts.queryClient) {
-    void opts.queryClient.invalidateQueries({
-      predicate: (q) => {
-        const head = q.queryKey[0];
-        return head === "readContract" || head === "readContracts";
-      },
-    });
   }
 
   // Non-blocking safety pass for lagging replicas — does not hold the UI.

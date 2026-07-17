@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  usePublicClient,
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -32,12 +33,20 @@ type EditProfileScreenProps = {
   onSaved: () => void;
 };
 
+function profileFailureMessage(error: unknown): string {
+  return (
+    formatWalletError(error instanceof Error ? error : new Error(String(error))) ??
+    "Could not save profile on Monad. Check the transaction and try again."
+  );
+}
+
 export function EditProfileScreen({
   address,
   onBack,
   onSaved,
 }: EditProfileScreenProps) {
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient({ chainId: monadTestnet.id });
 
   const { profile: chainProfile, isLoading, refetch } = useRunnerProfile(address);
 
@@ -47,9 +56,11 @@ export function EditProfileScreen({
   const [avatarId, setAvatarId] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [failedTxHash, setFailedTxHash] = useState<`0x${string}` | null>(null);
 
   useEffect(() => {
-    if (isLoading || hydrated) return;
+    if (hydrated) return;
+    if (isLoading) return;
     if (chainProfile.exists) {
       setHandle(chainProfile.handle);
       setName(chainProfile.name);
@@ -90,7 +101,8 @@ export function EditProfileScreen({
   const {
     isLoading: confirming,
     isSuccess,
-    isError: receiptError,
+    isError: receiptFailed,
+    error: receiptError,
     data: receipt,
   } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -98,33 +110,38 @@ export function EditProfileScreen({
     pollingInterval: 1_000,
   });
 
+  const receiptReverted = receipt?.status === "reverted";
+  const txFailed = receiptFailed || receiptReverted;
+
   const syncing = useAfterConfirmedTx(
     txHash,
     isSuccess,
-    receipt?.status === "reverted",
+    receiptReverted,
     async () => {
       await refetchAfterTx([() => refetch()], { queryClient });
       onSaved();
     },
   );
 
+  // Failed receipt must never leave the form locked — clear write state.
   useEffect(() => {
-    if (!isSuccess || !txHash || !receipt) return;
-    if (receipt.status === "reverted") {
-      setLocalError(
-        "Transaction reverted on Monad (handle taken or invalid). Try again.",
-      );
-    }
-  }, [isSuccess, txHash, receipt]);
-
-  useEffect(() => {
-    if (!receiptError) return;
+    if (!txFailed || !txHash) return;
+    setFailedTxHash(txHash);
     setLocalError(
-      "Could not confirm the transaction on Monad. Check your wallet activity.",
+      profileFailureMessage(
+        receiptError ?? new Error("Profile transaction reverted on Monad"),
+      ),
     );
-  }, [receiptError]);
+    reset();
+  }, [txFailed, txHash, receiptError, reset]);
 
-  const busy = isPending || confirming || syncing;
+  useEffect(() => {
+    if (!writeError) return;
+    setLocalError(profileFailureMessage(writeError));
+  }, [writeError]);
+
+  // Confirming only while waiting — never after failure/success settle.
+  const busy = isPending || (confirming && !txFailed) || syncing;
   const nameOk = name.trim().length > 0 && name.trim().length <= MAX_NAME_LEN;
   const bioOk = bio.length <= MAX_BIO_LEN;
   const handleOk = !handleError && !handleTaken;
@@ -132,6 +149,7 @@ export function EditProfileScreen({
 
   const handleSave = () => {
     setLocalError(null);
+    setFailedTxHash(null);
     reset();
 
     const handleMsg = validateHandleInput(handle);
@@ -163,15 +181,34 @@ export function EditProfileScreen({
       return;
     }
 
-    // Always writes msg.sender — never pass another wallet's address into setProfile
-    writeContract({
-      address: PROFILE_ADDRESS,
-      abi: PROFILE_ABI,
-      functionName: "setProfile",
-      args: [normalized, trimmed, bio, avatarId],
-      chainId: monadTestnet.id,
-      gas: SET_PROFILE_GAS,
-    });
+    void (async () => {
+      let gas = SET_PROFILE_GAS;
+      try {
+        if (publicClient) {
+          const estimated = await publicClient.estimateContractGas({
+            address: PROFILE_ADDRESS,
+            abi: PROFILE_ABI,
+            functionName: "setProfile",
+            args: [normalized, trimmed, bio, avatarId],
+            account: address,
+          });
+          const buffered = (estimated * 15n) / 10n;
+          if (buffered > gas) gas = buffered;
+        }
+      } catch (e) {
+        setLocalError(profileFailureMessage(e));
+        return;
+      }
+
+      writeContract({
+        address: PROFILE_ADDRESS,
+        abi: PROFILE_ABI,
+        functionName: "setProfile",
+        args: [normalized, trimmed, bio, avatarId],
+        chainId: monadTestnet.id,
+        gas,
+      });
+    })();
   };
 
   const male = AVATARS.filter((a) => a.gender === "male");
@@ -180,7 +217,7 @@ export function EditProfileScreen({
   return (
     <section className="edit-profile" aria-labelledby="edit-profile-heading">
       <header className="edit-profile__header">
-        <Button variant="ghost" onClick={onBack} disabled={busy}>
+        <Button variant="ghost" onClick={onBack}>
           Back
         </Button>
         <h1 id="edit-profile-heading" className="edit-profile__heading">
@@ -310,11 +347,11 @@ export function EditProfileScreen({
       {(localError || writeError) && (
         <Alert className="edit-profile__alert">
           {localError ?? formatWalletError(writeError) ?? "Could not save."}
-          {txHash && (
+          {(failedTxHash || txHash) && (
             <>
               {" "}
               <a
-                href={`${EXPLORER_URL}/tx/${txHash}`}
+                href={`${EXPLORER_URL}/tx/${failedTxHash ?? txHash}`}
                 target="_blank"
                 rel="noreferrer"
               >

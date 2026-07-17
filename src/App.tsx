@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useAccount } from "wagmi";
 import type { ParsedRun } from "./lib/gpx";
 import { parseGpx } from "./lib/gpx";
 import { addVerifiedPost, getPostsForAddress, type AchievementDef, type RunPost } from "./lib/posts";
 import { useCommunityFeed, usePersonalFeed } from "./lib/feed";
 import { AppShell, WalletChip } from "./design-system/components";
-import { ConnectScreen } from "./components/ConnectScreen";
+import { ConnectScreen, MonadNetworkGate } from "./components/ConnectScreen";
 import { FeedScreen } from "./components/FeedScreen";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { PublicProfileScreen } from "./components/PublicProfileScreen";
@@ -189,8 +190,10 @@ export default function App() {
     return <ConnectScreen />;
   }
 
+  let content: ReactNode;
+
   if (logStep) {
-    return (
+    content = (
       <AppShell
         brand="MovrChain"
         stepLabel={LOG_LABELS[logStep]}
@@ -229,11 +232,8 @@ export default function App() {
         )}
       </AppShell>
     );
-  }
-
-  // Own-wallet writes only — never open edit/stake with a third-party address
-  if (editingProfile) {
-    return (
+  } else if (editingProfile) {
+    content = (
       <AppShell
         brand="MovrChain"
         headerRight={<WalletChip address={address} connected />}
@@ -250,10 +250,8 @@ export default function App() {
         />
       </AppShell>
     );
-  }
-
-  if (achievementView) {
-    return (
+  } else if (achievementView) {
+    content = (
       <AppShell
         brand="MovrChain"
         headerRight={<WalletChip address={address} connected />}
@@ -268,12 +266,10 @@ export default function App() {
         />
       </AppShell>
     );
-  }
-
-  if (detailPost) {
+  } else if (detailPost) {
     const isOwn =
       detailPost.address.toLowerCase() === address.toLowerCase();
-    return (
+    content = (
       <AppShell
         brand="MovrChain"
         headerRight={<WalletChip address={address} connected />}
@@ -287,10 +283,8 @@ export default function App() {
         />
       </AppShell>
     );
-  }
-
-  if (viewedProfile) {
-    return (
+  } else if (viewedProfile) {
+    content = (
       <AppShell
         brand="MovrChain"
         headerRight={<WalletChip address={address} connected />}
@@ -313,10 +307,8 @@ export default function App() {
         />
       </AppShell>
     );
-  }
-
-  if (openClubId !== null) {
-    return (
+  } else if (openClubId !== null) {
+    content = (
       <AppShell
         brand="MovrChain"
         headerRight={<WalletChip address={address} connected />}
@@ -330,58 +322,60 @@ export default function App() {
         />
       </AppShell>
     );
+  } else {
+    content = (
+      <AppShell
+        brand="MovrChain"
+        headerRight={<WalletChip address={address} connected />}
+        onBrandClick={goToFeed}
+        bottomNav={
+          <BottomNav active={tab} onChange={setTab} onLogRun={startLogRun} />
+        }
+      >
+        {tab === "feed" && (
+          <FeedScreen
+            yourPosts={yourPosts}
+            communityPosts={communityPosts}
+            address={address}
+            loading={personalLoading || communityLoading}
+            onLogRun={startLogRun}
+            onOpenPost={setDetailPost}
+            onOpenProfile={openRunnerProfile}
+            onOpenClubsTab={() => setTab("clubs")}
+          />
+        )}
+        {tab === "clubs" && (
+          <ClubsScreen
+            address={address}
+            onOpenClub={(id) => setOpenClubId(id)}
+          />
+        )}
+        {tab === "staking" && (
+          <StakingDetailScreen
+            address={address}
+            viewerAddress={address}
+          />
+        )}
+        {tab === "profile" && (
+          <ProfileScreen
+            address={address}
+            posts={yourPosts}
+            onLogRun={startLogRun}
+            onEditProfile={() => setEditingProfile(true)}
+            onOpenAchievement={(achievement) =>
+              setAchievementView({
+                achievement,
+                subject: address,
+                viewOnly: false,
+              })
+            }
+            onOpenClub={(id) => setOpenClubId(id)}
+            onOpenClubsTab={() => setTab("clubs")}
+          />
+        )}
+      </AppShell>
+    );
   }
 
-  return (
-    <AppShell
-      brand="MovrChain"
-      headerRight={<WalletChip address={address} connected />}
-      onBrandClick={goToFeed}
-      bottomNav={
-        <BottomNav active={tab} onChange={setTab} onLogRun={startLogRun} />
-      }
-    >
-      {tab === "feed" && (
-        <FeedScreen
-          yourPosts={yourPosts}
-          communityPosts={communityPosts}
-          address={address}
-          loading={personalLoading || communityLoading}
-          onLogRun={startLogRun}
-          onOpenPost={setDetailPost}
-          onOpenProfile={openRunnerProfile}
-          onOpenClubsTab={() => setTab("clubs")}
-        />
-      )}
-      {tab === "clubs" && (
-        <ClubsScreen
-          address={address}
-          onOpenClub={(id) => setOpenClubId(id)}
-        />
-      )}
-      {tab === "staking" && (
-        <StakingDetailScreen
-          address={address}
-          viewerAddress={address}
-        />
-      )}
-      {tab === "profile" && (
-        <ProfileScreen
-          address={address}
-          posts={yourPosts}
-          onLogRun={startLogRun}
-          onEditProfile={() => setEditingProfile(true)}
-          onOpenAchievement={(achievement) =>
-            setAchievementView({
-              achievement,
-              subject: address,
-              viewOnly: false,
-            })
-          }
-          onOpenClub={(id) => setOpenClubId(id)}
-          onOpenClubsTab={() => setTab("clubs")}
-        />
-      )}
-    </AppShell>
-  );
+  return <MonadNetworkGate>{content}</MonadNetworkGate>;
 }
