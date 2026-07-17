@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ERC721URIStorageUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
 import {MovrChainAttestation} from "./MovrChainAttestation.sol";
 
 /// @title AchievementNFT — community achievements as NFTs
 /// @notice Admin creates achievement definitions. Runners claim when attestation stats qualify.
 ///         Owners can list NFTs for sale in native MON.
-contract AchievementNFT is ERC721URIStorage, AccessControl, ReentrancyGuard {
+contract AchievementNFT is ERC721URIStorageUpgradeable, AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeable {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     enum Criterion {
@@ -34,9 +35,9 @@ contract AchievementNFT is ERC721URIStorage, AccessControl, ReentrancyGuard {
         bool active;
     }
 
-    MovrChainAttestation public immutable attestation;
-    uint256 public nextAchievementId = 1;
-    uint256 public nextTokenId = 1;
+    MovrChainAttestation public attestation;
+    uint256 public nextAchievementId;
+    uint256 public nextTokenId;
 
     mapping(uint256 => AchievementDef) public achievements;
     mapping(uint256 => string) private _achievementURI;
@@ -54,9 +55,17 @@ contract AchievementNFT is ERC721URIStorage, AccessControl, ReentrancyGuard {
     event Unlisted(uint256 indexed tokenId);
     event Purchased(uint256 indexed tokenId, address indexed buyer, address indexed seller, uint256 priceWei);
 
-    constructor(address owner_, address attestation_) ERC721("MovrChain Achievement", "MAVT") {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, address attestation_) external initializer {
         require(owner_ != address(0) && attestation_ != address(0), "zero addr");
+        __ERC721_init("MovrChain Achievement", "MAVT");
+        __AccessControl_init();
         attestation = MovrChainAttestation(attestation_);
+        nextAchievementId = 1;
+        nextTokenId = 1;
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(ADMIN_ROLE, owner_);
     }
@@ -64,7 +73,7 @@ contract AchievementNFT is ERC721URIStorage, AccessControl, ReentrancyGuard {
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721URIStorage, AccessControl)
+        override(ERC721URIStorageUpgradeable, AccessControlUpgradeable)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
@@ -218,4 +227,9 @@ contract AchievementNFT is ERC721URIStorage, AccessControl, ReentrancyGuard {
             emit Unlisted(tokenId);
         }
     }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

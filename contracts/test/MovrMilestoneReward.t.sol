@@ -8,6 +8,7 @@ import {MovrMilestoneReward} from "../src/MovrMilestoneReward.sol";
 import {ClubMemberNFT} from "../src/ClubMemberNFT.sol";
 import {MovrClubRegistry} from "../src/MovrClubRegistry.sol";
 import {ClubTreasury} from "../src/ClubTreasury.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract MovrMilestoneRewardTest is Test {
     MovrToken movr;
@@ -22,10 +23,9 @@ contract MovrMilestoneRewardTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         movr = new MovrToken(owner);
-        attestation = new MovrChainAttestation(owner);
-        rewards = new MovrMilestoneReward(owner, address(movr), address(attestation));
-        memberNft = new ClubMemberNFT(owner);
-        registry = new MovrClubRegistry(address(movr), address(memberNft));
+        attestation = ProxyDeploy.attestation(owner);
+        rewards = ProxyDeploy.milestoneReward(owner, address(movr), address(attestation));
+        (memberNft,, registry) = ProxyDeploy.clubStack(owner, address(movr));
         memberNft.grantRole(memberNft.MINTER_ROLE(), address(registry));
         rewards.setClubRegistry(address(registry));
         attestation.setClubRegistry(address(registry));
@@ -110,7 +110,7 @@ contract MovrMilestoneRewardTest is Test {
     function testEmptyPoolReverts() public {
         // Fresh reward contract with no funding
         vm.prank(owner);
-        MovrMilestoneReward empty = new MovrMilestoneReward(owner, address(movr), address(attestation));
+        MovrMilestoneReward empty = ProxyDeploy.milestoneReward(owner, address(movr), address(attestation));
 
         vm.prank(runner);
         bytes32 hash = attestation.attestRun(keccak256("empty"), 2000, 700);

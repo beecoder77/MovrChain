@@ -2,8 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 interface IClubRegistryChallenges {
     function isMember(uint256 clubId, address account) external view returns (bool);
@@ -28,7 +30,7 @@ interface IClubTreasuryChallenges {
 }
 
 /// @title MovrClubChallenges — manager challenges with approval + treasury reward split
-contract MovrClubChallenges is ReentrancyGuard {
+contract MovrClubChallenges is ReentrancyGuard, OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_RULE = 280;
@@ -71,10 +73,10 @@ contract MovrClubChallenges is ReentrancyGuard {
         uint256 approvedCount;
     }
 
-    IERC20 public immutable movr;
-    IClubRegistryChallenges public immutable registry;
+    IERC20 public movr;
+    IClubRegistryChallenges public registry;
 
-    uint256 public nextChallengeId = 1;
+    uint256 public nextChallengeId;
     Challenge[] private _challenges;
     mapping(uint256 => uint256[]) private _clubChallengeIds;
     mapping(uint256 => mapping(address => CompletionStatus)) public completionStatus;
@@ -95,10 +97,16 @@ contract MovrClubChallenges is ReentrancyGuard {
     event ChallengeSettled(uint256 indexed challengeId, uint256 winners, uint256 payoutEach);
     event ChallengeCancelled(uint256 indexed challengeId, address indexed by, uint256 refunded);
 
-    constructor(address movr_, address registry_) {
-        require(movr_ != address(0) && registry_ != address(0), "zero");
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, address movr_, address registry_) external initializer {
+        require(owner_ != address(0) && movr_ != address(0) && registry_ != address(0), "zero");
+        __Ownable_init(owner_);
         movr = IERC20(movr_);
         registry = IClubRegistryChallenges(registry_);
+        nextChallengeId = 1;
     }
 
     function challengeCount() external view returns (uint256) {
@@ -300,4 +308,9 @@ contract MovrClubChallenges is ReentrancyGuard {
         if (unit == DurationUnit.Days) return uint64(duration) * 1 days;
         return uint64(duration) * 30 days;
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

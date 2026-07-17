@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ClubMemberNFT} from "./ClubMemberNFT.sol";
@@ -17,7 +18,7 @@ interface IClubRegistryView {
 
 /// @title ClubTreasury — pooled MOVR + proposals for group spends
 /// @notice Vote weight: member 1 · ClubMemberNFT 2 · top-3 lifetime donors 3 (highest wins).
-contract ClubTreasury is ReentrancyGuard {
+contract ClubTreasury is Initializable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_TITLE = 64;
@@ -41,10 +42,10 @@ contract ClubTreasury is ReentrancyGuard {
         uint64 createdAt;
     }
 
-    IERC20 public immutable movr;
-    IClubRegistryView public immutable registry;
-    ClubMemberNFT public immutable memberNft;
-    uint256 public immutable clubId;
+    IERC20 public movr;
+    IClubRegistryView public registry;
+    ClubMemberNFT public memberNft;
+    uint256 public clubId;
     address public staking; // authorized to push donations (yield %)
     address public milestoneReward; // authorized to push run → treasury MOVR
     address public challenges; // authorized to escrow challenge rewards
@@ -73,7 +74,11 @@ contract ClubTreasury is ReentrancyGuard {
     event MilestoneRewardSet(address indexed milestoneReward);
     event ChallengesSet(address indexed challenges);
 
-    constructor(address movr_, address registry_, address memberNft_, uint256 clubId_) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address movr_, address registry_, address memberNft_, uint256 clubId_) external initializer {
         require(movr_ != address(0) && registry_ != address(0) && memberNft_ != address(0) && clubId_ > 0, "zero");
         movr = IERC20(movr_);
         registry = IClubRegistryView(registry_);
@@ -318,4 +323,7 @@ contract ClubTreasury is ReentrancyGuard {
             }
         }
     }
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

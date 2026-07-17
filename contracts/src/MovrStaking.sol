@@ -2,9 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {AchievementNFT} from "./AchievementNFT.sol";
 import {ClubBadgeNFT} from "./ClubBadgeNFT.sol";
 import {ClubTreasury} from "./ClubTreasury.sol";
@@ -12,7 +13,7 @@ import {MovrClubRegistry} from "./MovrClubRegistry.sol";
 
 /// @title MovrStaking — stake MOVR; achievement + club-badge boosts; optional club yield donate
 /// @notice Accrual uses a per-user `lockedRate` so `configureRates` only affects future intervals.
-contract MovrStaking is AccessControl, ReentrancyGuard {
+contract MovrStaking is AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -20,14 +21,14 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
     uint256 public constant MIN_DONATE_BPS = 200;
     uint256 public constant MAX_DONATE_BPS = 500;
 
-    IERC20 public immutable movr;
-    AchievementNFT public immutable achievements;
+    IERC20 public movr;
+    AchievementNFT public achievements;
     MovrClubRegistry public clubRegistry;
     ClubBadgeNFT public clubBadges;
 
     uint256 public rewardPerTokenPerSecond;
-    uint256 public maxBoostBps = 10_000;
-    uint256 public baseAchievementBoostBps = 200;
+    uint256 public maxBoostBps;
+    uint256 public baseAchievementBoostBps;
     bool public useDefBoost;
 
     struct StakeInfo {
@@ -54,13 +55,20 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
     event RewardsFunded(uint256 amount, uint256 rewardReserve);
     event ExcessWithdrawn(address indexed to, uint256 amount);
 
-    constructor(address owner_, address movr_, address achievements_) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, address movr_, address achievements_) external initializer {
         require(owner_ != address(0) && movr_ != address(0) && achievements_ != address(0), "zero");
+        __AccessControl_init();
         movr = IERC20(movr_);
         achievements = AchievementNFT(achievements_);
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(ADMIN_ROLE, owner_);
         rewardPerTokenPerSecond = 3e9;
+        maxBoostBps = 10_000;
+        baseAchievementBoostBps = 200;
         useDefBoost = true;
     }
 
@@ -214,4 +222,9 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         }
         emit Claimed(msg.sender, kept, donated, treasury);
     }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

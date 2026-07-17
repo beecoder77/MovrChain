@@ -7,6 +7,7 @@ import {ClubMemberNFT} from "../src/ClubMemberNFT.sol";
 import {MovrClubRegistry} from "../src/MovrClubRegistry.sol";
 import {ClubTreasury} from "../src/ClubTreasury.sol";
 import {ClubBadgeNFT} from "../src/ClubBadgeNFT.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract MovrClubTest is Test {
     MovrToken movr;
@@ -20,10 +21,9 @@ contract MovrClubTest is Test {
 
     function setUp() public {
         movr = new MovrToken(address(this));
-        memberNft = new ClubMemberNFT(address(this));
-        registry = new MovrClubRegistry(address(movr), address(memberNft));
+        (memberNft,, registry) = ProxyDeploy.clubStack(address(this), address(movr));
         memberNft.grantRole(memberNft.MINTER_ROLE(), address(registry));
-        badges = new ClubBadgeNFT(address(this), address(registry));
+        badges = ProxyDeploy.badgeNft(address(this), address(registry));
     }
 
     function testCreateClubMintsMemberNftAndJoinBadge() public {

@@ -1,28 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 
 /// @title ClubMemberNFT — soulbound-ish membership badge (weight tier 2)
 /// @notice Only the club registry can mint. Transfers are blocked after mint.
-contract ClubMemberNFT is ERC721, AccessControl {
+contract ClubMemberNFT is ERC721Upgradeable, AccessControlUpgradeable, UUPSUpgradeable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    uint256 public nextTokenId = 1;
+    uint256 public nextTokenId;
     mapping(uint256 => uint256) public tokenClubId;
     mapping(address => mapping(uint256 => uint256)) public memberToken; // account => clubId => tokenId
 
     event MemberMinted(address indexed account, uint256 indexed clubId, uint256 indexed tokenId);
     event MemberBurned(address indexed account, uint256 indexed clubId, uint256 indexed tokenId);
 
-    constructor(address admin_) ERC721("MovrChain Club Member", "MCLUB") {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address admin_) external initializer {
         require(admin_ != address(0), "zero");
+        __ERC721_init("MovrChain Club Member", "MCLUB");
+        __AccessControl_init();
+        nextTokenId = 1;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
         _grantRole(MINTER_ROLE, admin_);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Upgradeable, AccessControlUpgradeable)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
     }
 
@@ -59,4 +72,9 @@ contract ClubMemberNFT is ERC721, AccessControl {
         }
         return super._update(to, tokenId, auth);
     }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

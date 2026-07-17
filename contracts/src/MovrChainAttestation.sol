@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 interface IClubOf {
     function clubOf(address account) external view returns (uint256);
@@ -13,7 +14,7 @@ interface IClubOf {
 /// @notice Run commitments on Monad. Self-attest is optional; owner can require ATTESTER_ROLE.
 /// @dev `runHash` = keccak256(abi.encode(runner, distanceMeters, durationSeconds, routeCommit)).
 ///      Club membership for rewards is snapshotted at attest time into `clubIdAtAttest`.
-contract MovrChainAttestation is Ownable, Pausable, AccessControl {
+contract MovrChainAttestation is OwnableUpgradeable, PausableUpgradeable, AccessControlUpgradeable, UUPSUpgradeable {
     error AlreadyAttested();
     error InvalidDistance();
     error InvalidDuration();
@@ -50,7 +51,7 @@ contract MovrChainAttestation is Ownable, Pausable, AccessControl {
     uint256 public constant MAX_ATTESTS_PER_DAY = 24;
 
     /// @notice When false, only ATTESTER_ROLE may attest (production / oracle path).
-    bool public selfAttestEnabled = true;
+    bool public selfAttestEnabled;
     IClubOf public clubRegistry;
 
     mapping(bytes32 => RunRecord) public attestations;
@@ -71,7 +72,15 @@ contract MovrChainAttestation is Ownable, Pausable, AccessControl {
     event SelfAttestUpdated(bool enabled);
     event ClubRegistrySet(address indexed registry);
 
-    constructor(address owner_) Ownable(owner_) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_) external initializer {
+        __Ownable_init(owner_);
+        __Pausable_init();
+        __AccessControl_init();
+        selfAttestEnabled = true;
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(ATTESTER_ROLE, owner_);
     }
@@ -204,7 +213,12 @@ contract MovrChainAttestation is Ownable, Pausable, AccessControl {
         return attestations[runHash].runner != address(0);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(AccessControl) returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view override(AccessControlUpgradeable) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

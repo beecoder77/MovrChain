@@ -7,6 +7,7 @@ import {ClubMemberNFT} from "../src/ClubMemberNFT.sol";
 import {MovrClubRegistry} from "../src/MovrClubRegistry.sol";
 import {ClubTreasury} from "../src/ClubTreasury.sol";
 import {MovrClubChallenges} from "../src/MovrClubChallenges.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract MovrClubChallengesTest is Test {
     MovrToken movr;
@@ -23,10 +24,9 @@ contract MovrClubChallengesTest is Test {
 
     function setUp() public {
         movr = new MovrToken(address(this));
-        memberNft = new ClubMemberNFT(address(this));
-        registry = new MovrClubRegistry(address(movr), address(memberNft));
+        (memberNft,, registry) = ProxyDeploy.clubStack(address(this), address(movr));
         memberNft.grantRole(memberNft.MINTER_ROLE(), address(registry));
-        challenges = new MovrClubChallenges(address(movr), address(registry));
+        challenges = ProxyDeploy.challenges(address(this), address(movr), address(registry));
         registry.setChallenges(address(challenges));
 
         vm.prank(captain);

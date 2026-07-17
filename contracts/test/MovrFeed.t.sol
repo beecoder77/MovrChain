@@ -4,17 +4,19 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 import {MovrFeed} from "../src/MovrFeed.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract MovrFeedTest is Test {
     MovrChainAttestation attestation;
     MovrFeed feed;
 
+    address owner = address(this);
     address runner = address(0xB0B);
     address other = address(0xC0C);
 
     function setUp() public {
-        attestation = new MovrChainAttestation(address(this));
-        feed = new MovrFeed(address(this), address(attestation));
+        attestation = ProxyDeploy.attestation(owner);
+        feed = ProxyDeploy.feed(owner, address(attestation));
     }
 
     function testPublishAddsCommunityAndPersonal() public {

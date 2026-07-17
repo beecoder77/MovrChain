@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 import {AchievementNFT} from "../src/AchievementNFT.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract AchievementNFTTest is Test {
     MovrChainAttestation attestation;
@@ -19,8 +20,8 @@ contract AchievementNFTTest is Test {
 
     function setUp() public {
         vm.startPrank(owner);
-        attestation = new MovrChainAttestation(owner);
-        nfts = new AchievementNFT(owner, address(attestation));
+        attestation = ProxyDeploy.attestation(owner);
+        nfts = ProxyDeploy.achievementNft(owner, address(attestation));
         singleId =
             nfts.createAchievement("1K", "single", AchievementNFT.Criterion.SingleRunMeters, 1000, 500, "ipfs://1k");
         totalId = nfts.createAchievement(

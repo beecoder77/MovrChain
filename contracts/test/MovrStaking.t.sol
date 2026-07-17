@@ -10,6 +10,7 @@ import {ClubMemberNFT} from "../src/ClubMemberNFT.sol";
 import {ClubBadgeNFT} from "../src/ClubBadgeNFT.sol";
 import {MovrClubRegistry} from "../src/MovrClubRegistry.sol";
 import {ClubTreasury} from "../src/ClubTreasury.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract MovrStakingTest is Test {
     MovrToken movr;
@@ -26,13 +27,12 @@ contract MovrStakingTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         movr = new MovrToken(owner);
-        attestation = new MovrChainAttestation(owner);
-        nfts = new AchievementNFT(owner, address(attestation));
-        staking = new MovrStaking(owner, address(movr), address(nfts));
-        memberNft = new ClubMemberNFT(owner);
-        registry = new MovrClubRegistry(address(movr), address(memberNft));
+        attestation = ProxyDeploy.attestation(owner);
+        nfts = ProxyDeploy.achievementNft(owner, address(attestation));
+        staking = ProxyDeploy.staking(owner, address(movr), address(nfts));
+        (memberNft,, registry) = ProxyDeploy.clubStack(owner, address(movr));
         memberNft.grantRole(memberNft.MINTER_ROLE(), address(registry));
-        clubBadges = new ClubBadgeNFT(owner, address(registry));
+        clubBadges = ProxyDeploy.badgeNft(owner, address(registry));
         registry.setStaking(address(staking));
         staking.setClubRegistry(address(registry));
         staking.setClubBadges(address(clubBadges));

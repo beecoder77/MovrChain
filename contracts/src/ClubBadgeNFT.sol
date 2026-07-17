@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import {MovrClubRegistry} from "./MovrClubRegistry.sol";
 
 /// @title ClubBadgeNFT — club achievements (Join, Donatur, Pulse Payer, Squad, Roster, Consensus)
-contract ClubBadgeNFT is ERC721, AccessControl {
+contract ClubBadgeNFT is ERC721Upgradeable, AccessControlUpgradeable, UUPSUpgradeable {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     enum Badge {
@@ -19,8 +20,8 @@ contract ClubBadgeNFT is ERC721, AccessControl {
 
     }
 
-    MovrClubRegistry public immutable registry;
-    uint256 public nextTokenId = 1;
+    MovrClubRegistry public registry;
+    uint256 public nextTokenId;
 
     mapping(address => mapping(uint8 => bool)) public hasClaimed;
     mapping(uint256 => uint8) public tokenBadge;
@@ -29,9 +30,16 @@ contract ClubBadgeNFT is ERC721, AccessControl {
 
     event BadgeClaimed(address indexed account, uint8 indexed badge, uint256 indexed tokenId);
 
-    constructor(address admin_, address registry_) ERC721("MovrChain Club Badge", "MCBADGE") {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address admin_, address registry_) external initializer {
         require(admin_ != address(0) && registry_ != address(0), "zero");
+        __ERC721_init("MovrChain Club Badge", "MCBADGE");
+        __AccessControl_init();
         registry = MovrClubRegistry(registry_);
+        nextTokenId = 1;
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
         _grantRole(ADMIN_ROLE, admin_);
         stakingBoostBps[uint8(Badge.JoinClub)] = 200;
@@ -42,7 +50,12 @@ contract ClubBadgeNFT is ERC721, AccessControl {
         stakingBoostBps[uint8(Badge.Consensus)] = 300;
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Upgradeable, AccessControlUpgradeable)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
     }
 
@@ -77,4 +90,9 @@ contract ClubBadgeNFT is ERC721, AccessControl {
         }
         return super._update(to, tokenId, auth);
     }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

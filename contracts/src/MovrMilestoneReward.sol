@@ -2,9 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {MovrChainAttestation} from "./MovrChainAttestation.sol";
 import {ClubTreasury} from "./ClubTreasury.sol";
 
@@ -26,19 +27,19 @@ interface IClubRegistryForReward {
 
 /// @title MovrMilestoneReward — pay MOVR proportional to attested distance
 /// @notice Runner: 1 MOVR/km. Club cut: 1 MOVR/10km to the club snapshotted at **attest** time.
-contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
+contract MovrMilestoneReward is AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     uint256 public constant METERS_PER_KM = 1000;
     uint256 public constant METERS_PER_CLUB_REWARD = 10_000;
 
-    IERC20 public immutable movr;
-    MovrChainAttestation public immutable attestation;
+    IERC20 public movr;
+    MovrChainAttestation public attestation;
     IClubRegistryForReward public clubRegistry;
 
-    uint256 public rewardPerKm = 1 ether;
-    uint256 public clubRewardPer10Km = 1 ether;
+    uint256 public rewardPerKm;
+    uint256 public clubRewardPer10Km;
 
     mapping(bytes32 => bool) public claimed;
 
@@ -55,10 +56,17 @@ contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
     event Funded(address indexed from, uint256 amount);
     event ExcessWithdrawn(address indexed to, uint256 amount);
 
-    constructor(address owner_, address movr_, address attestation_) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, address movr_, address attestation_) external initializer {
         require(owner_ != address(0) && movr_ != address(0) && attestation_ != address(0), "zero");
+        __AccessControl_init();
         movr = IERC20(movr_);
         attestation = MovrChainAttestation(attestation_);
+        rewardPerKm = 1 ether;
+        clubRewardPer10Km = 1 ether;
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(ADMIN_ROLE, owner_);
     }
@@ -151,4 +159,9 @@ contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
 
         emit RewardClaimed(runHash, msg.sender, amount, clubAmount, treasury);
     }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }
