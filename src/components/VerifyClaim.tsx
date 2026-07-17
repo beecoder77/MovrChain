@@ -42,7 +42,10 @@ import { monadTestnet } from "viem/chains";
 type VerifyClaimProps = {
   run: ParsedRun;
   onBack: () => void;
+  /** Save local cache after on-chain publish — must not navigate away. */
   onVerified: (txHash?: string) => boolean;
+  /** User-driven exit to feed after the pipeline finishes (or soft-fails claim). */
+  onContinueToFeed: () => void;
 };
 
 type PipelineStepId = "parsed" | "attested" | "published" | "reward";
@@ -62,7 +65,12 @@ function bufferedGas(estimate: bigint, floor: bigint): bigint {
   return bumped > floor ? bumped : floor;
 }
 
-export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
+export function VerifyClaim({
+  run,
+  onBack,
+  onVerified,
+  onContinueToFeed,
+}: VerifyClaimProps) {
   const { address } = useAccount();
   const routeCommit = computeRouteCommit(run);
   const runHash = address
@@ -411,21 +419,21 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
     publicClient,
   ]);
 
-  // Finish → save local cache + go to Your Run Feed
+  // Finish pipeline → persist local cache; stay on this screen until user continues
   useEffect(() => {
     if (finishTried.current || finished) return;
     if (!published) return;
+    // Wait for claim attempt to settle when milestone applies — but never treat a
+    // mid-flight claim error as a reason to abandon the screen.
     const rewardDone = !milestone || movrClaimed || claimFailed;
     if (!rewardDone) return;
     finishTried.current = true;
     const tx = publishTxHash ?? claimTxHash ?? attestTxHash;
     const ok = onVerified(tx);
-    if (ok) {
-      setFinished(true);
-    } else {
+    if (!ok) {
       setWarning("Published on-chain, but could not save a local copy.");
-      setFinished(true);
     }
+    setFinished(true);
   }, [
     published,
     milestone,
@@ -537,9 +545,18 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
   if (attestBusy) primaryLabel = "Submitting attestation…";
   else if (publishBusy) primaryLabel = "Publishing to feed…";
   else if (claimBusy) primaryLabel = "Claiming MOVR…";
-  else if (finished) primaryLabel = "On your feed";
+  else if (finished) primaryLabel = "Continue to feed";
   else if (warning) primaryLabel = "Try again";
   else if (hashAlreadyOnChain && !published) primaryLabel = "Publish to feed";
+
+  const heading = (() => {
+    if (finished) {
+      if (movrClaimed || !milestone) return "Run published";
+      return "Published — MOVR claim incomplete";
+    }
+    if (published) return "Published on-chain";
+    return "Verify your run";
+  })();
 
   return (
     <section className="verify-screen" aria-label="Verify and publish">
@@ -548,13 +565,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
       </div>
 
       <div className="verify-status">
-        <h2 className="verify-heading">
-          {finished
-            ? "Run on Your feed"
-            : published
-              ? "Published on-chain"
-              : "Verify your run"}
-        </h2>
+        <h2 className="verify-heading">{heading}</h2>
         <p className="verify-subtitle">
           {formatDistance(run.totalDistanceMeters)} km · {run.name}
         </p>
@@ -622,7 +633,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
               if (!verified) handleVerify();
               else if (!published) {
                 autoPublishTried.current = false;
-                startPublish();
+                void startPublish();
               } else if (milestone && !movrClaimed && REWARD_CONTRACT_ADDRESS) {
                 autoClaimTried.current = false;
                 void (async () => {
@@ -657,6 +668,12 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
           </Button>
         )}
 
+        {finished && (
+          <Button block onClick={onContinueToFeed}>
+            Continue to feed
+          </Button>
+        )}
+
         {explorerTx && (
           <LinkButton
             block
@@ -668,7 +685,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
           </LinkButton>
         )}
 
-        <Button variant="ghost" block onClick={onBack} disabled={busy}>
+        <Button variant="ghost" block onClick={onBack} disabled={busy || finished}>
           Back to summary
         </Button>
       </div>

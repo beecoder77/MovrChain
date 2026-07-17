@@ -164,6 +164,7 @@ export default function App() {
     [address],
   );
 
+  /** Persist locally + refresh feeds — do NOT leave the verify screen yet. */
   const handleVerified = useCallback(
     (txHash?: string): boolean => {
       if (!address || !run || run.isSample) return false;
@@ -171,13 +172,18 @@ export default function App() {
       refreshFeed();
       void refetchPersonal();
       void refetchCommunity();
-      setLogStep(null);
-      setRun(null);
-      setTab("feed");
       return saved;
     },
     [address, run, refreshFeed, refetchPersonal, refetchCommunity],
   );
+
+  /** Explicit exit from verify → feed (user taps Continue). */
+  const handleVerifyDone = useCallback(() => {
+    setLogStep(null);
+    setRun(null);
+    setError(null);
+    setTab("feed");
+  }, []);
 
   if (!isConnected || !address) {
     return <ConnectScreen />;
@@ -218,6 +224,7 @@ export default function App() {
             run={run}
             onBack={() => setLogStep("summary")}
             onVerified={handleVerified}
+            onContinueToFeed={handleVerifyDone}
           />
         )}
       </AppShell>
