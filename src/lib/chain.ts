@@ -142,6 +142,20 @@ export const MOVR_CHAIN_ABI = [
     stateMutability: "view",
   },
   {
+    type: "function",
+    name: "effectiveCurrentStreakDays",
+    inputs: [{ name: "runner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "clubIdAtAttest",
+    inputs: [{ name: "runHash", type: "bytes32" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
     type: "event",
     name: "RunAttested",
     inputs: [
@@ -151,6 +165,7 @@ export const MOVR_CHAIN_ABI = [
       { name: "milestoneMet", type: "bool", indexed: false },
       { name: "currentStreakDays", type: "uint256", indexed: false },
       { name: "routeCommit", type: "bytes32", indexed: false },
+      { name: "clubIdAtAttest", type: "uint256", indexed: false },
     ],
   },
 ] as const;

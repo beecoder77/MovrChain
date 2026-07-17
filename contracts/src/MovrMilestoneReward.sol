@@ -95,7 +95,8 @@ contract MovrMilestoneReward is AccessControlUpgradeable, ReentrancyGuard, UUPSU
         emit Funded(msg.sender, amount);
     }
 
-    /// @notice Rescue mis-funded MOVR (full balance is the claim pool — withdraw only unused ops excess).
+    /// @notice Timelock/ops kill-switch: withdraw MOVR from the claim pool.
+    /// @dev Full balance is claimable by runners — prefer funding carefully; this is governance rescue, not “excess over liabilities”.
     function withdrawExcess(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(to != address(0) && amount > 0, "bad");
         require(amount <= movr.balanceOf(address(this)), "balance");

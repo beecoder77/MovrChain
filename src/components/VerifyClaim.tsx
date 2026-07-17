@@ -16,6 +16,12 @@ import {
 } from "../lib/chain";
 import { FEED_ABI, FEED_CONTRACT_ADDRESS, publishRunName } from "../lib/feed";
 import { CLUB_REGISTRY, CLUB_REGISTRY_ABI } from "../lib/clubs";
+import {
+  ATTEST_GAS_FLOOR,
+  PUBLISH_GAS_FLOOR,
+  MILESTONE_CLAIM_GAS_FLOOR,
+  bufferedMonadGas,
+} from "../lib/monadGas";
 import { downsamplePoints } from "../lib/gpx";
 import { saveRouteFromRun } from "../lib/routes";
 import { RouteMap } from "./RouteMap";
@@ -52,20 +58,8 @@ type VerifyClaimProps = {
 
 type PipelineStepId = "parsed" | "attested" | "published" | "reward";
 
-/**
- * Gas LIMIT is a ceiling: you pay for gas USED, unused units are refunded.
- * Monad eth_estimateGas often undercounts heavy storage (feed string + array push),
- * so we estimate then multiply, with floors so cold SSTORE never OOGs.
- */
-const GAS_BUFFER_BPS = 200n; // 2.00× estimate
-const ATTEST_GAS_FLOOR = 350_000n;
-const PUBLISH_GAS_FLOOR = 800_000n;
-const CLAIM_GAS_FLOOR = 550_000n;
-
-function bufferedGas(estimate: bigint, floor: bigint): bigint {
-  const bumped = (estimate * GAS_BUFFER_BPS) / 100n;
-  return bumped > floor ? bumped : floor;
-}
+/** Milestone claim gas floor (alias for shared monadGas constant). */
+const CLAIM_GAS_FLOOR = MILESTONE_CLAIM_GAS_FLOOR;
 
 export function VerifyClaim({
   run,
@@ -96,7 +90,6 @@ export function VerifyClaim({
     query: { enabled: clubsLive && Boolean(address), staleTime: 12_000 },
   });
   const myClubId = (clubIdRaw as bigint | undefined) ?? 0n;
-  const inClub = myClubId > 0n;
 
   // Keep map available for feed detail after attest
   useEffect(() => {
@@ -121,6 +114,23 @@ export function VerifyClaim({
     chainId: monadTestnet.id,
     pollingInterval: 1_000,
   });
+
+  const { data: clubIdAtAttestRaw } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: MOVR_CHAIN_ABI,
+    functionName: "clubIdAtAttest",
+    args: [runHash],
+    chainId: monadTestnet.id,
+    query: {
+      enabled: clubsLive && Boolean(address) && attestSuccess,
+      staleTime: 0,
+      refetchOnMount: "always",
+    },
+  });
+  // Prefer snapshotted club at attest for reward copy; fall back to live membership pre-attest.
+  const clubIdForReward =
+    clubIdAtAttestRaw !== undefined ? (clubIdAtAttestRaw as bigint) : myClubId;
+  const inClub = clubIdForReward > 0n;
 
   const {
     writeContract: writePublish,
@@ -332,7 +342,7 @@ export function VerifyClaim({
           args: [runHash, runName],
           account: address,
         });
-        gas = bufferedGas(estimated, PUBLISH_GAS_FLOOR);
+        gas = bufferedMonadGas(estimated, PUBLISH_GAS_FLOOR);
       }
     } catch {
       // Fall back to floor when estimate fails (common on flaky RPC)
@@ -400,7 +410,7 @@ export function VerifyClaim({
             args: [runHash],
             account: address,
           });
-          gas = bufferedGas(estimated, CLAIM_GAS_FLOOR);
+          gas = bufferedMonadGas(estimated, CLAIM_GAS_FLOOR);
         }
       } catch {
         gas = CLAIM_GAS_FLOOR;
@@ -491,7 +501,7 @@ export function VerifyClaim({
             ],
             account: address,
           });
-          gas = bufferedGas(estimated, ATTEST_GAS_FLOOR);
+          gas = bufferedMonadGas(estimated, ATTEST_GAS_FLOOR);
         }
       } catch {
         gas = ATTEST_GAS_FLOOR;
@@ -656,7 +666,7 @@ export function VerifyClaim({
                         args: [runHash],
                         account: address,
                       });
-                      gas = bufferedGas(estimated, CLAIM_GAS_FLOOR);
+                      gas = bufferedMonadGas(estimated, CLAIM_GAS_FLOOR);
                     }
                   } catch {
                     gas = CLAIM_GAS_FLOOR;

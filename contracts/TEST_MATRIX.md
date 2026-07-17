@@ -1,7 +1,7 @@
 # MovrChain Security Audit Reconciliation
 
-**Status: all High / Medium / Low findings are FIXED (none left as “document only”).**  
-Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS / Beacon / Multisig / Timelock upgrade suites.
+**Status: all High / Medium / Low findings from original + Jul 18 reaudits are FIXED** (Info residuals documented).  
+Foundry: `forge test --offline` → **91 passed** (Jul 18 2026 reaudit #2).
 
 ---
 
@@ -20,10 +20,10 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 | **Low** | ClubMemberNFT | stale NFT after leave | **FIXED** | same as High burn |
 | **Low** | ClubBadgeNFT | transferable; boost unused | **FIXED** | soulbound + wired into `MovrStaking.boostBpsOf` |
 | **Low** | MovrStaking | `configureRates` retroactive | **FIXED** | per-user `lockedRate` (future intervals only) |
-| **Low** | AchievementNFT | `buyNFT` reentrancy | **FIXED** | `nonReentrant` |
+| **Low** | AchievementNFT | `buyNFT` reentrancy | **FIXED** | `nonReentrant` + N9 |
 | **Info** | MovrToken | unlimited mint | **FIXED** | `MAX_SUPPLY` = 1e9 MOVR |
 | **Info** | Attestation | owner pause | **FIXED** | retained as intentional ops control (tested) |
-| **Info** | Milestone / Staking | no fund withdraw | **FIXED** | `withdrawExcess` |
+| **Info** | Milestone / Staking | no fund withdraw | **FIXED** | `withdrawExcess` (see reaudit #2 note on Milestone) |
 | **Info** | Registry | one club / wallet | **FIXED** | enforced on-chain (`clubOf` / `busy`) |
 | **Info** | MovrFeed | no pause | **FIXED** | `Ownable` + `Pausable` on publish |
 
@@ -36,6 +36,33 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 | Irreversible challenge approve | `revokeApproval` |
 | Zero-boost owned-count skip | always adjust `ownedAchievementCount` |
 | Redeploy orphans production state | **UUPS + Beacon** with Timelock + 2-of-3 Multisig |
+
+---
+
+## Jul 18 2026 reaudit #1 (post-UUPS + gas)
+
+| Sev | Area | Issue | Status | Fix |
+|-----|------|--------|--------|-----|
+| **Medium** | Deploy | Attestation `DEFAULT_ADMIN` left on deployer | **FIXED** | `PrivilegeHandoff` + U9 |
+| **Medium** | Deploy | Deployer kept `ADMIN_ROLE` / `MINTER_ROLE` | **FIXED** | Grant + renounce in library; U9–U10 |
+| **Low** | Frontend | Streak progress used undecayed storage | **FIXED** | `effectiveCurrentStreakDays` + N8 |
+| **Info** | Frontend | NFT claim OOG | **FIXED** | `monadGas.ts` floors / buffer |
+
+---
+
+## Jul 18 2026 reaudit #2
+
+| Sev | Area | Issue | Status | Fix |
+|-----|------|--------|--------|-----|
+| **Medium** | Deploy | `ADMIN_ADDRESS` granted pre-handoff survived Timelock cutover | **FIXED** | No pre-handoff grant; Timelock grants after cutover |
+| **Medium** | MilestoneReward | `withdrawExcess` can empty claim pool | **OK** (intentional) | Timelock kill-switch; documented — not “excess over liabilities” |
+| **Medium** | Frontend gas | VerifyClaim / clubs used 2.0× + “unused refunded” (wrong on Monad) | **FIXED** | Shared `bufferedMonadGas` (1.5×) |
+| **Low** | Challenges | Approved leaver still counted in `approvedCount` for settle math | **FIXED** | Settle counts current-member winners only; H11 |
+| **Low** | Frontend ABI | `RunAttested` omitted `clubIdAtAttest` | **FIXED** | ABI + `clubIdAtAttest` view |
+| **Low** | Frontend UX | Verify reward copy used live `clubOf` | **FIXED** | Prefer `clubIdAtAttest` after attest |
+| **Low** | Tests | S6 `rewardReserve` empty path untested | **FIXED** | `testClaimRevertsWhenRewardReserveEmpty` |
+| **Info** | MovrToken | Deployer keeps mint admin (immutable token, not in UUPS handoff) | **OK** (ops) | Optional post-cutover hand token admin → Timelock |
+| **Info** | Attestation | Deployer keeps `ATTESTER_ROLE` | **OK** (intentional) | Prod: Timelock disables self-attest + `setAttester` |
 
 ---
 
@@ -66,7 +93,7 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 |----|------|--------|
 | R1–R7 | Pay / club cut / empty / non-runner | ✅/➕ |
 | R8 | Join-after-attest does **not** get club cut | ➕ |
-| R9 | `withdrawExcess` | ➕ |
+| R9 | `withdrawExcess` (Timelock kill-switch) | ➕ |
 
 ### MovrProfile
 | ID | Case | Status |
@@ -78,13 +105,15 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 |----|------|--------|
 | S1–S4 | Stake / donate / claim | ✅/➕ |
 | S5 | `configureRates` | ➕ |
-| S6 | `rewardReserve` | ➕ |
+| S6 | Empty `rewardReserve` reverts claim | ➕ |
 | S7 | Rates not retroactive (`lockedRate`) | ➕ |
 
 ### AchievementNFT
 | ID | Case | Status |
 |----|------|--------|
 | N1–N7 | Claim / boost snapshot / market / reentrancy | ✅/➕ |
+| N8 | Streak ineligible after idle decay | ➕ |
+| N9 | `buyNFT` reentrancy guard (malicious seller) | ➕ |
 
 ### Clubs
 | ID | Case | Status |
@@ -95,6 +124,7 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 | ID | Case | Status |
 |----|------|--------|
 | H1–H10 | Manager create / cancel / dust / revoke | ✅/➕ |
+| H11 | Approved leaver forfeits on settle | ➕ |
 
 ### Upgradeability (UUPS / Beacon / Multisig / Timelock)
 | ID | Case | Status |
@@ -107,6 +137,17 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 | U6 | Direct UUPS upgrade by non-owner reverts | ➕ |
 | U7 | Two clubs share beacon; one upgrade hits both; balances intact | ➕ |
 | U8 | Non-owner cannot upgrade beacon | ➕ |
+| U9 | Privilege handoff: deployer drained; Timelock admin; ATTESTER + registry MINTER kept | ➕ |
+| U10 | Drained deployer cannot `grantRole` / `createAchievement` | ➕ |
+
+### Frontend / gas (manual + observed)
+| ID | Case | Status |
+|----|------|--------|
+| N*1 | `claimAchievement` with estimate buffer ≥ URI mint cost | ✅ (3.5M floor) |
+| N*2 | Claim preflight `eligible` + clear stuck `claiming` | ✅ |
+| N*3 | Streak progress uses `effectiveCurrentStreakDays` | ✅ |
+| N*4 | Shared `bufferedMonadGas` (1.5×) for verify + clubs | ✅ |
+| N*5 | Reward copy uses `clubIdAtAttest` after attest | ✅ |
 
 ---
 
@@ -121,8 +162,9 @@ Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS /
 | Logic change (no new address) | Multisig confirm → Timelock schedule → wait delay → execute (`UpgradeViaTimelock.s.sol`) |
 | Club treasury logic change | Beacon `upgradeTo` via same Timelock path (`MODE=beacon`) |
 
-Post-deploy wiring (handled by `DeployUpgradeableStack`):
+Post-deploy wiring (handled by `DeployUpgradeableStack` via `PrivilegeHandoff`):
 1. `attestation.setClubRegistry(registry)`
 2. `staking.setClubBadges(badges)` + `setClubRegistry`
-3. Ownership / `DEFAULT_ADMIN_ROLE` → Timelock; Multisig is Timelock proposer
-4. Optional production: `attestation.setSelfAttestEnabled(false)` + grant `ATTESTER_ROLE` (via Timelock)
+3. Ownable + AccessControl (`DEFAULT_ADMIN` / `ADMIN_ROLE` / `MINTER_ROLE`) → Timelock; deployer renounces those roles
+4. Optional `ADMIN_ADDRESS`: grant AchievementNFT `ADMIN_ROLE` **via Timelock after cutover** (not in the Foundry script)
+5. Optional production: `attestation.setSelfAttestEnabled(false)` + grant `ATTESTER_ROLE` (via Timelock / `setAttester`)

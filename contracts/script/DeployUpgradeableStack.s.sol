@@ -7,6 +7,7 @@ import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/Upgradeabl
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
 import {MovrMultisig} from "../src/MovrMultisig.sol";
+import {PrivilegeHandoff} from "../src/PrivilegeHandoff.sol";
 import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 import {AchievementNFT} from "../src/AchievementNFT.sol";
 import {MovrStaking} from "../src/MovrStaking.sol";
@@ -61,7 +62,11 @@ contract DeployUpgradeableStack is Script {
                 abi.encodeCall(AchievementNFT.initialize, (deployer, address(attestation)))
             )
         );
-        if (admin != deployer) nfts.setAdmin(admin, true);
+        // Do NOT grant ADMIN_ADDRESS before Timelock handoff — that role would survive
+        // deployer renounce. After cutover, Multisig→Timelock should `setAdmin(ADMIN_ADDRESS, true)`.
+        if (admin != deployer) {
+            console2.log("ADMIN_ADDRESS (grant via Timelock after cutover):", admin);
+        }
         _seedAchievements(nfts);
 
         ClubMemberNFT memberNft =
@@ -112,17 +117,19 @@ contract DeployUpgradeableStack is Script {
         );
         registry.setChallenges(address(challenges));
 
-        // ---- Hand ownership / admin to Timelock ----
-        _transferOwnable(address(attestation), address(timelock));
-        _transferOwnable(address(feed), address(timelock));
-        _transferOwnable(address(registry), address(timelock));
-        _transferOwnable(address(challenges), address(timelock));
+        // ---- Hand ownership / admin to Timelock (full privilege drain from deployer) ----
+        PrivilegeHandoff.transferOwnable(address(attestation), address(timelock));
+        PrivilegeHandoff.transferOwnable(address(feed), address(timelock));
+        PrivilegeHandoff.transferOwnable(address(registry), address(timelock));
+        PrivilegeHandoff.transferOwnable(address(challenges), address(timelock));
 
-        _handAccessAdmin(address(nfts), deployer, address(timelock));
-        _handAccessAdmin(address(memberNft), deployer, address(timelock));
-        _handAccessAdmin(address(badges), deployer, address(timelock));
-        _handAccessAdmin(address(staking), deployer, address(timelock));
-        _handAccessAdmin(address(milestone), deployer, address(timelock));
+        // Attestation also has AccessControl (DEFAULT_ADMIN + ATTESTER) beyond Ownable.
+        PrivilegeHandoff.handAccessAdmin(address(attestation), deployer, address(timelock));
+        PrivilegeHandoff.handAccessAdmin(address(nfts), deployer, address(timelock));
+        PrivilegeHandoff.handAccessAdmin(address(memberNft), deployer, address(timelock));
+        PrivilegeHandoff.handAccessAdmin(address(badges), deployer, address(timelock));
+        PrivilegeHandoff.handAccessAdmin(address(staking), deployer, address(timelock));
+        PrivilegeHandoff.handAccessAdmin(address(milestone), deployer, address(timelock));
 
         // Timelock self-admin only via Multisig proposals thereafter
         timelock.renounceRole(timelock.DEFAULT_ADMIN_ROLE(), deployer);
@@ -147,23 +154,6 @@ contract DeployUpgradeableStack is Script {
 
     function _uups(address impl, bytes memory initData) internal returns (address) {
         return address(new ERC1967Proxy(impl, initData));
-    }
-
-    function _transferOwnable(address target, address newOwner) internal {
-        (bool ok,) = target.call(abi.encodeWithSignature("transferOwnership(address)", newOwner));
-        require(ok, "ownable");
-    }
-
-    function _handAccessAdmin(address target, address from, address to) internal {
-        bytes32 defaultAdmin = 0x00;
-        (bool ok1,) = target.call(abi.encodeWithSignature("grantRole(bytes32,address)", defaultAdmin, to));
-        require(ok1, "grant admin");
-        // Best-effort ADMIN_ROLE grant (not all contracts define it)
-        bytes32 adminRole = keccak256("ADMIN_ROLE");
-        (bool okAdmin,) = target.call(abi.encodeWithSignature("grantRole(bytes32,address)", adminRole, to));
-        okAdmin; // optional
-        (bool ok2,) = target.call(abi.encodeWithSignature("renounceRole(bytes32,address)", defaultAdmin, from));
-        require(ok2, "renounce");
     }
 
     function _uri(string memory slug) internal view returns (string memory uri) {

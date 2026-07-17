@@ -18,7 +18,7 @@ export const JOIN_CLUB_GAS = 450_000n;
 export const REQUEST_JOIN_GAS = 200_000n;
 export const APPROVE_JOIN_GAS = 450_000n;
 export const SET_VISIBILITY_GAS = 120_000n;
-/** Monad eth_estimateGas often undercounts storage (strings / vote maps) — floors are ceilings; unused is refunded. */
+/** Monad eth_estimateGas often undercounts storage (strings / vote maps). Prefer estimate + bufferedClubGas. */
 export const PROPOSE_GAS = 750_000n;
 export const VOTE_GAS = 550_000n;
 export const EXECUTE_GAS = 450_000n;
@@ -26,13 +26,7 @@ export const DONATE_GAS = 350_000n;
 export const SET_DONATE_BPS_GAS = 120_000n;
 /** @deprecated Prefer estimate + bufferedMonadGas; kept as last-resort floor. */
 export { CLAIM_BADGE_GAS_FLOOR as CLAIM_BADGE_GAS } from "./monadGas";
-
-const CLUB_GAS_BUFFER_BPS = 200n; // 2.00× estimate
-
-export function bufferedClubGas(estimate: bigint, floor: bigint): bigint {
-  const bumped = (estimate * CLUB_GAS_BUFFER_BPS) / 100n;
-  return bumped > floor ? bumped : floor;
-}
+export { bufferedMonadGas as bufferedClubGas } from "./monadGas";
 
 export const CLUB_REGISTRY_ABI = [
   {

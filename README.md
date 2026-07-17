@@ -217,13 +217,13 @@ cd contracts
 forge test --offline
 ```
 
-Current hardening baseline: **75 tests, 0 failures** across token, attestation, feed, profile, achievements, staking, rewards, clubs, treasury, membership, badges, and challenges.
+Current hardening baseline: **91 tests, 0 failures** across token, attestation, feed, profile, achievements, staking, rewards, clubs, treasury, membership, badges, challenges, UUPS / Beacon / Multisig / Timelock upgrades, and privilege handoff.
 
 Required pre-deploy checklist:
 
 - [x] `forge test --offline` passes with no compiler warnings.
-- [ ] Every High / Medium / Low finding in `contracts/TEST_MATRIX.md` is `FIXED`.
-- [ ] Constructor and one-time wiring order matches the deployment flow below.
+- [x] Every High / Medium / Low finding in `contracts/TEST_MATRIX.md` is `FIXED` (including Jul 18 2026 reaudits #1–#2).
+- [x] Constructor and one-time wiring order matches the deployment flow below (`DeployUpgradeableStack`).
 - [ ] Reward pools are funded without exceeding `MovrToken.MAX_SUPPLY()`.
 - [ ] Representative reads confirm bytecode and expected configuration.
 - [ ] All new implementations are source-verified on MonadScan.
@@ -238,7 +238,7 @@ Required pre-deploy checklist:
 
 All addresses below are deployed on chain ID `10143`, have non-empty bytecode, pass representative ABI read calls, and have source code verified on MonadScan. The frontend defaults in `[src/lib/contracts.ts](src/lib/contracts.ts)` and local overrides in `.env.local` must remain synchronized with this registry.
 
-> **Jul 2026 security hardening is live on the addresses below** (immutable deploy). Source on branch `feat/uups-upgradeability` converts stateful contracts to **UUPS proxies + ClubTreasury Beacon** under a **2-of-3 Multisig → 24h Timelock**. The next `./redeploy-all.sh` (after setting `MULTISIG_SIGNER_2` / `MULTISIG_SIGNER_3`) is the one-time cutover to stable proxy addresses — after that, logic upgrades must **not** change published addresses or require `contracts.ts` / README edits.
+> **Jul 2026 security hardening is live on the addresses below** (immutable deploy). UUPS + Beacon + Multisig/Timelock is **merged on `main`** but not yet cut over on-chain. The next `./redeploy-all.sh` (after setting `MULTISIG_SIGNER_2` / `MULTISIG_SIGNER_3`) is the one-time cutover to stable proxy addresses — after that, logic upgrades must **not** change published addresses or require `contracts.ts` / README edits. See [contracts/TEST_MATRIX.md](contracts/TEST_MATRIX.md) for the Jul 18 reaudit disposition.
 
 
 | Contract             | Address                                      | Verified source                                                                                    |
@@ -329,7 +329,7 @@ Stop if any test fails. The deployment scripts assume the same deployer controls
 - Open `contracts/.env` and configure:
   - `PRIVATE_KEY`: Private key of a funded Monad Testnet deployer wallet (also Multisig signer 1).
   - `MULTISIG_SIGNER_2` / `MULTISIG_SIGNER_3`: two additional distinct Multisig signers (required for `./redeploy-all.sh`).
-  - `ADMIN_ADDRESS`: Optional secondary AchievementNFT admin (pre-Timelock handoff).
+  - `ADMIN_ADDRESS`: Optional AchievementNFT admin — **do not** grant in the deploy script (would survive Timelock handoff). After cutover, Multisig→Timelock should call `setAdmin(ADMIN_ADDRESS, true)`. Logged at deploy if set.
   - `TIMELOCK_DELAY`: Optional seconds (default `86400`).
   - `MOVR_TOKEN`: existing token to keep.
 

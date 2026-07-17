@@ -192,6 +192,38 @@ contract MovrClubChallengesTest is Test {
         assertEq(movr.balanceOf(treasury), treasuryBefore);
     }
 
+    /// @notice Approved member who leaves before settle forfeits; remaining winners split full pool.
+    function testApprovedLeaverForfeitsOnSettle() public {
+        address bob = address(0xB2);
+        vm.prank(captain);
+        registry.addMember(clubId, bob);
+
+        uint256 id = _create(7, 10 ether);
+
+        vm.prank(alice);
+        challenges.submitCompletion(id);
+        vm.prank(bob);
+        challenges.submitCompletion(id);
+
+        vm.prank(admin);
+        challenges.approveCompletion(id, alice);
+        vm.prank(admin);
+        challenges.approveCompletion(id, bob);
+
+        (,,,,,,,,, uint256 approvedStored) = challenges.getChallenge(id);
+        assertEq(approvedStored, 2);
+
+        vm.prank(alice);
+        registry.leaveClub(clubId);
+
+        vm.warp(block.timestamp + 8 days);
+        vm.prank(captain);
+        challenges.settle(id);
+
+        assertEq(movr.balanceOf(bob), 10 ether);
+        assertEq(movr.balanceOf(alice), 0);
+    }
+
     function testNonMemberCannotSubmit() public {
         uint256 id = _create(1, 1 ether);
 

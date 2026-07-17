@@ -71,6 +71,17 @@ export function AchievementDetailScreen({
     query: { enabled: !isClub, staleTime: 0, refetchOnMount: "always" },
   });
 
+  // Match on-chain `eligible` — storage streak is not decayed until next attest.
+  const { data: effectiveStreak, refetch: refetchEffectiveStreak } =
+    useReadContract({
+      address: CONTRACT_ADDRESS,
+      abi: MOVR_CHAIN_ABI,
+      functionName: "effectiveCurrentStreakDays",
+      args: [address],
+      chainId: monadTestnet.id,
+      query: { enabled: !isClub, staleTime: 0, refetchOnMount: "always" },
+    });
+
   const { data: joined } = useReadContract({
     address: CLUB_REGISTRY,
     abi: CLUB_REGISTRY_ABI,
@@ -171,9 +182,13 @@ export function AchievementDetailScreen({
   const claimed = isClub ? claimedClub : claimedRun;
   const eligible = isClub ? eligibleClub : eligibleRun;
   const stats = parseRunnerStats(statsRaw);
+  const statsForProgress =
+    effectiveStreak !== undefined
+      ? { ...stats, currentStreakDays: Number(effectiveStreak) }
+      : stats;
   const progress = progressForAchievement(
     achievement,
-    stats,
+    statsForProgress,
     clubProgressValue,
   );
   const status = claimStatus(Boolean(claimed), Boolean(eligible));
@@ -210,6 +225,7 @@ export function AchievementDetailScreen({
             () => refetchClaimedRun(),
             () => refetchEligibleRun(),
             () => refetchStats(),
+            () => refetchEffectiveStreak(),
           ];
       await refetchAfterTx(fns, {
         queryClient,

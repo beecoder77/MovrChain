@@ -68,6 +68,31 @@ contract AchievementNFTTest is Test {
         vm.stopPrank();
     }
 
+    /// @notice Idle decay zeros effective streak — NFT must not stay claimable on storage/longest alone.
+    function testStreakIneligibleAfterIdleDecay() public {
+        vm.warp(1_700_000_000);
+        vm.startPrank(runner);
+        attestation.attestRun(keccak256("s1"), 1500, 600);
+        vm.warp(1_700_000_000 + 1 days);
+        attestation.attestRun(keccak256("s2"), 1500, 600);
+        vm.warp(1_700_000_000 + 2 days);
+        attestation.attestRun(keccak256("s3"), 1500, 600);
+        assertTrue(nfts.eligible(runner, streakId));
+        vm.stopPrank();
+
+        // Skip >1 day without a qualifying run → effective streak decays to 0.
+        vm.warp(1_700_000_000 + 5 days);
+        assertEq(attestation.effectiveCurrentStreakDays(runner), 0);
+        (,,, uint256 stored, uint256 longest,) = attestation.runnerStats(runner);
+        assertEq(stored, 3); // storage unchanged until next attest
+        assertEq(longest, 3);
+        assertFalse(nfts.eligible(runner, streakId));
+
+        vm.prank(runner);
+        vm.expectRevert(bytes("not eligible"));
+        nfts.claimAchievement(streakId);
+    }
+
     function testBoostSnapshottedAgainstAdminEdit() public {
         vm.prank(runner);
         attestation.attestRun(keccak256("boost"), 1500, 600);
@@ -123,5 +148,48 @@ contract AchievementNFTTest is Test {
         vm.prank(runner);
         vm.expectRevert(bytes("not eligible"));
         nfts.claimAchievement(singleId);
+    }
+
+    function testBuyNFTReentrancyGuard() public {
+        vm.prank(runner);
+        attestation.attestRun(keccak256("re"), 1500, 600);
+        vm.prank(runner);
+        uint256 tokenId = nfts.claimAchievement(singleId);
+
+        MaliciousSeller seller = new MaliciousSeller(nfts);
+        vm.prank(runner);
+        nfts.transferFrom(runner, address(seller), tokenId);
+
+        vm.prank(address(seller));
+        nfts.listNFT(tokenId, 1 ether);
+        seller.arm(tokenId);
+
+        vm.deal(buyer, 2 ether);
+        vm.prank(buyer);
+        vm.expectRevert();
+        nfts.buyNFT{value: 1 ether}(tokenId);
+    }
+}
+
+/// @dev Reenters `buyNFT` from `receive` when paid as listing seller.
+contract MaliciousSeller {
+    AchievementNFT public immutable nfts;
+    uint256 public tokenId;
+    bool public armed;
+
+    constructor(AchievementNFT nfts_) {
+        nfts = nfts_;
+    }
+
+    function arm(uint256 tokenId_) external {
+        tokenId = tokenId_;
+        armed = true;
+    }
+
+    receive() external payable {
+        if (armed) {
+            armed = false;
+            nfts.buyNFT{value: 0}(tokenId);
+        }
     }
 }

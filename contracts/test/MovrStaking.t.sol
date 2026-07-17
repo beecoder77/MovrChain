@@ -148,4 +148,19 @@ contract MovrStakingTest is Test {
         assertEq(clubBadges.accountBoostBps(runner), 200);
         assertEq(staking.boostBpsOf(runner), 200);
     }
+
+    function testClaimRevertsWhenRewardReserveEmpty() public {
+        vm.startPrank(owner);
+        MovrStaking emptyStaking = ProxyDeploy.staking(owner, address(movr), address(nfts));
+        vm.stopPrank();
+
+        vm.startPrank(runner);
+        movr.approve(address(emptyStaking), 50 ether);
+        emptyStaking.stake(50 ether);
+        vm.warp(block.timestamp + 1 days);
+        assertGt(emptyStaking.pendingReward(runner), 0);
+        vm.expectRevert(bytes("insufficient rewards"));
+        emptyStaking.claim();
+        vm.stopPrank();
+    }
 }

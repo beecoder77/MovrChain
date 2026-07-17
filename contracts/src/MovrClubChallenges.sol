@@ -262,9 +262,17 @@ contract MovrClubChallenges is ReentrancyGuard, OwnableUpgradeable, UUPSUpgradea
         c.state = ChallengeState.Settled;
 
         (,, address treasury,,,,) = registry.getClub(c.clubId);
-        uint256 winners = c.approvedCount;
         uint256 pool = c.rewardPool;
         c.rewardPool = 0;
+
+        address[] memory roster = registry.members(c.clubId);
+        // Count winners among *current* members only — approved leavers forfeit (share → treasury).
+        uint256 winners;
+        for (uint256 i = 0; i < roster.length; i++) {
+            if (completionStatus[challengeId][roster[i]] == CompletionStatus.Approved) {
+                winners += 1;
+            }
+        }
 
         if (winners == 0 || pool / winners == 0) {
             if (pool > 0) movr.safeTransfer(treasury, pool);
@@ -274,7 +282,6 @@ contract MovrClubChallenges is ReentrancyGuard, OwnableUpgradeable, UUPSUpgradea
 
         uint256 each = pool / winners;
 
-        address[] memory roster = registry.members(c.clubId);
         uint256 paid;
         for (uint256 i = 0; i < roster.length; i++) {
             address m = roster[i];
