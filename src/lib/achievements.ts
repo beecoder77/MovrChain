@@ -7,7 +7,8 @@ export const NFT_CONTRACT = ACHIEVEMENT_NFT_ADDRESS;
 export const STAKING_CONTRACT = STAKING_ADDRESS;
 export const MOVR_TOKEN = MOVR_TOKEN_ADDRESS;
 
-export const CLAIM_NFT_GAS = 450_000n;
+/** @deprecated Prefer estimate + bufferedMonadGas; kept as last-resort floor. */
+export { CLAIM_NFT_GAS_FLOOR as CLAIM_NFT_GAS } from "./monadGas";
 export const STAKE_GAS = 400_000n;
 export const UNSTAKE_GAS = 350_000n;
 export const CLAIM_REWARD_GAS = 350_000n;
@@ -216,7 +217,8 @@ export function progressForAchievement(
   else if (def.criterion === "total_distance_meters")
     current = stats.totalDistanceMeters;
   else if (def.criterion === "streak_days")
-    current = Math.max(stats.currentStreakDays, stats.longestStreakDays);
+    // Must match on-chain `eligible` (active streak only — longest does not unlock).
+    current = stats.currentStreakDays;
   else current = clubProgress ?? 0;
 
   const threshold = def.threshold;

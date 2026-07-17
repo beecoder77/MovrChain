@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { zeroAddress } from "viem";
 import {
+  usePublicClient,
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -10,7 +11,6 @@ import { monadTestnet } from "viem/chains";
 import type { AchievementDef } from "../lib/posts";
 import {
   ACHIEVEMENT_NFT_ABI,
-  CLAIM_NFT_GAS,
   claimStatus,
   formatBoostBps,
   formatProgressValue,
@@ -20,12 +20,16 @@ import {
   progressForAchievement,
 } from "../lib/achievements";
 import {
-  CLAIM_BADGE_GAS,
   CLUB_BADGE_ABI,
   CLUB_BADGE_NFT,
   CLUB_REGISTRY,
   CLUB_REGISTRY_ABI,
 } from "../lib/clubs";
+import {
+  bufferedMonadGas,
+  CLAIM_BADGE_GAS_FLOOR,
+  CLAIM_NFT_GAS_FLOOR,
+} from "../lib/monadGas";
 import { CONTRACT_ADDRESS, MOVR_CHAIN_ABI } from "../lib/chain";
 import { formatWalletError } from "../lib/errors";
 import { refetchAfterTx } from "../lib/refetchAfterTx";
@@ -48,7 +52,9 @@ export function AchievementDetailScreen({
   onBack,
 }: AchievementDetailScreenProps) {
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient({ chainId: monadTestnet.id });
   const [warning, setWarning] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState(false);
   const isClub = isClubAchievement(achievement);
   const badgeId = achievement.clubBadgeId ?? 0;
   const chainId = BigInt(achievement.chainId);
@@ -220,46 +226,138 @@ export function AchievementDetailScreen({
     },
   );
 
-  const busy = isPending || confirming || syncing;
+  const busy = claiming || isPending || confirming || syncing;
 
   useEffect(() => {
-    if (writeError) setWarning(formatWalletError(writeError));
-    else if (receiptFailed || receiptReverted)
+    if (writeError) {
+      setClaiming(false);
+      setWarning(formatWalletError(writeError));
+    } else if (receiptFailed || receiptReverted) {
+      setClaiming(false);
       setWarning(
         formatWalletError(receiptError ?? new Error("Claim failed on Monad")),
       );
-  }, [writeError, receiptFailed, receiptError, receiptReverted]);
+      void (isClub ? refetchEligibleClub() : refetchEligibleRun());
+      void (isClub ? refetchClaimedClub() : refetchClaimedRun());
+    }
+  }, [
+    writeError,
+    receiptFailed,
+    receiptError,
+    receiptReverted,
+    isClub,
+    refetchEligibleClub,
+    refetchEligibleRun,
+    refetchClaimedClub,
+    refetchClaimedRun,
+  ]);
 
-  const handleClaim = () => {
+  useEffect(() => {
+    if (isSuccess && !receiptReverted) setClaiming(false);
+  }, [isSuccess, receiptReverted]);
+
+  const handleClaim = async () => {
     if (!canClaim) {
       setWarning("You can only claim achievements for your own wallet.");
       return;
     }
     setWarning(null);
     reset();
-    if (isClub) {
-      if (!badgesLive) {
-        setWarning("Club badge contract not configured.");
+    setClaiming(true);
+
+    try {
+      if (isClub) {
+        if (!badgesLive) {
+          setWarning("Club badge contract not configured.");
+          setClaiming(false);
+          return;
+        }
+        const fresh = await refetchEligibleClub();
+        if (!fresh.data) {
+          setWarning(
+            "Not eligible for this club badge yet. Refresh and try again.",
+          );
+          setClaiming(false);
+          return;
+        }
+
+        let gas = CLAIM_BADGE_GAS_FLOOR;
+        if (publicClient) {
+          try {
+            const estimated = await publicClient.estimateContractGas({
+              address: CLUB_BADGE_NFT,
+              abi: CLUB_BADGE_ABI,
+              functionName: "claim",
+              args: [badgeId],
+              account: viewerAddress,
+            });
+            gas = bufferedMonadGas(estimated, CLAIM_BADGE_GAS_FLOOR);
+          } catch (e) {
+            setWarning(
+              formatWalletError(
+                e instanceof Error ? e : new Error(String(e)),
+              ) ?? "Could not estimate gas for badge claim.",
+            );
+            setClaiming(false);
+            return;
+          }
+        }
+
+        writeContract({
+          address: CLUB_BADGE_NFT,
+          abi: CLUB_BADGE_ABI,
+          functionName: "claim",
+          args: [badgeId],
+          chainId: monadTestnet.id,
+          gas,
+        });
         return;
       }
+
+      const fresh = await refetchEligibleRun();
+      if (!fresh.data) {
+        setWarning(
+          "Not eligible for this achievement yet. Verify a qualifying run on Monad, then try again.",
+        );
+        setClaiming(false);
+        return;
+      }
+
+      let gas = CLAIM_NFT_GAS_FLOOR;
+      if (publicClient) {
+        try {
+          const estimated = await publicClient.estimateContractGas({
+            address: NFT_CONTRACT,
+            abi: ACHIEVEMENT_NFT_ABI,
+            functionName: "claimAchievement",
+            args: [chainId],
+            account: viewerAddress,
+          });
+          gas = bufferedMonadGas(estimated, CLAIM_NFT_GAS_FLOOR);
+        } catch (e) {
+          setWarning(
+            formatWalletError(e instanceof Error ? e : new Error(String(e))) ??
+              "Could not estimate gas for NFT claim.",
+          );
+          setClaiming(false);
+          return;
+        }
+      }
+
       writeContract({
-        address: CLUB_BADGE_NFT,
-        abi: CLUB_BADGE_ABI,
-        functionName: "claim",
-        args: [badgeId],
+        address: NFT_CONTRACT,
+        abi: ACHIEVEMENT_NFT_ABI,
+        functionName: "claimAchievement",
+        args: [chainId],
         chainId: monadTestnet.id,
-        gas: CLAIM_BADGE_GAS,
+        gas,
       });
-      return;
+    } catch (e) {
+      setClaiming(false);
+      setWarning(
+        formatWalletError(e instanceof Error ? e : new Error(String(e))),
+      );
     }
-    writeContract({
-      address: NFT_CONTRACT,
-      abi: ACHIEVEMENT_NFT_ABI,
-      functionName: "claimAchievement",
-      args: [chainId],
-      chainId: monadTestnet.id,
-      gas: CLAIM_NFT_GAS,
-    });
   };
 
   const statusLabel =
@@ -320,7 +418,7 @@ export function AchievementDetailScreen({
           {canClaim
             ? isClub
               ? "Club badges unlock from membership, donations, votes, and roster size."
-              : "Eligibility uses attested Monad stats — import and verify runs so the claim unlocks."
+              : "Eligibility uses attested Monad stats. Claim gas is estimated on send (achievement art URIs need a higher limit)."
             : "View only — badges can only be claimed by this runner’s wallet."}
         </p>
       </div>

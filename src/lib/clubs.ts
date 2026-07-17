@@ -24,7 +24,8 @@ export const VOTE_GAS = 550_000n;
 export const EXECUTE_GAS = 450_000n;
 export const DONATE_GAS = 350_000n;
 export const SET_DONATE_BPS_GAS = 120_000n;
-export const CLAIM_BADGE_GAS = 350_000n;
+/** @deprecated Prefer estimate + bufferedMonadGas; kept as last-resort floor. */
+export { CLAIM_BADGE_GAS_FLOOR as CLAIM_BADGE_GAS } from "./monadGas";
 
 const CLUB_GAS_BUFFER_BPS = 200n; // 2.00× estimate
 

@@ -82,8 +82,14 @@ function mapKnownFailure(combined: string): string | null {
   if (combined.includes("enforcedpause") || combined.includes("paused")) {
     return "Attestations are temporarily paused. Please try again later.";
   }
+  if (combined.includes("not eligible")) {
+    return "Not eligible for this claim yet. Refresh and check your attested stats (or active streak), then try again.";
+  }
+  if (combined.includes("already claimed")) {
+    return "You already claimed this achievement.";
+  }
   if (combined.includes("out of gas") || combined.includes("intrinsic gas too low")) {
-    return "Transaction ran out of gas on Monad. Retry — the gas limit was too low for this write (unused gas is refunded, so a higher limit does not raise the fee by itself).";
+    return "Transaction ran out of gas on Monad. Retry — the app will re-estimate a higher gas limit. On Monad, gas_limit should stay close to the estimate to avoid overpaying.";
   }
   if (combined.includes("handle taken")) {
     return "That handle is already taken. Pick another unique @handle.";

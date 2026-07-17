@@ -493,12 +493,18 @@ The application is optimized for the following network details:
 
 ### Gas Limit Considerations
 
-Monad charges on the transaction's **gas limit** rather than just the gas consumed. Standard gas estimation APIs like `eth_estimateGas` can underestimate gas usage for contract calls that write heavy data (such as appending strings to arrays in `MovrFeed` or updating large struct maps).
+Monad charges primarily on the transaction **gas limit** (not only gas used), so limits must be high enough to finish the write but not wildly oversized.
 
-To ensure transactions do not fail due to Out-Of-Gas (OOG) errors:
+`eth_estimateGas` often undercounts cold storage and long string writes (feed publish, club proposals, **achievement NFT mints** that store `data:` token URIs on-chain). Observed `claimAchievement` estimates on testnet are ~**3.1M** gas for a typical metadata URI.
 
-- Deployment scripts use a 2.5x multiplier (`--gas-estimate-multiplier 250`).
-- Frontend calls apply a 2x buffer (`GAS_BUFFER_BPS = 200n`) with safety floors:
-  - Attestation: `350,000` gas
-  - Feed Publish: `800,000` gas
-  - Milestone Claim: `550,000` gas
+To avoid Out-Of-Gas (OOG) failures:
+
+- Deployment scripts use a 2.5× multiplier (`--gas-estimate-multiplier 250`).
+- Most frontend writes estimate then buffer (see `[src/lib/monadGas.ts](src/lib/monadGas.ts)` and `VerifyClaim`):
+  - Achievement NFT claim: estimate × **1.5**, floor **`3,500,000`**
+  - Club badge claim: estimate × **1.5**, floor **`400,000`**
+  - Attestation: floor **`350,000`** (with estimate buffer in verify flow)
+  - Feed publish: floor **`800,000`**
+  - Milestone reward claim: floor **`550,000`**
+- Prefer **estimate + modest buffer** over a huge fixed limit: on Monad an oversized `gas` field costs real `MON` even if unused.
+- MonadScan may label a failed tx as “out of gas” when `gasUsed == gasLimit`; always check the decoded revert (e.g. `not eligible`) before assuming the floor alone was wrong.
