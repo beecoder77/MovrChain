@@ -1,7 +1,7 @@
 # MovrChain Security Audit Reconciliation
 
 **Status: all High / Medium / Low findings are FIXED (none left as “document only”).**  
-Foundry: `forge test --offline` → **75 passed** (Jul 2026).
+Foundry: `forge test --offline` → **85 passed** (Jul 2026) — includes UUPS / Beacon / Multisig / Timelock upgrade suites.
 
 ---
 
@@ -35,6 +35,7 @@ Foundry: `forge test --offline` → **75 passed** (Jul 2026).
 | Unbacked staking rewards | `rewardReserve` |
 | Irreversible challenge approve | `revokeApproval` |
 | Zero-boost owned-count skip | always adjust `ownedAchievementCount` |
+| Redeploy orphans production state | **UUPS + Beacon** with Timelock + 2-of-3 Multisig |
 
 ---
 
@@ -95,13 +96,33 @@ Foundry: `forge test --offline` → **75 passed** (Jul 2026).
 |----|------|--------|
 | H1–H10 | Manager create / cancel / dust / revoke | ✅/➕ |
 
+### Upgradeability (UUPS / Beacon / Multisig / Timelock)
+| ID | Case | Status |
+|----|------|--------|
+| U1 | Multisig 1-of-3 cannot execute | ➕ |
+| U2 | Multisig 2-of-3 executes | ➕ |
+| U3 | `replaceSigner` only via self-call | ➕ |
+| U4 | Timelock premature execute reverts | ➕ |
+| U5 | Timelock upgrade preserves attestation state + new logic | ➕ |
+| U6 | Direct UUPS upgrade by non-owner reverts | ➕ |
+| U7 | Two clubs share beacon; one upgrade hits both; balances intact | ➕ |
+| U8 | Non-owner cannot upgrade beacon | ➕ |
+
 ---
 
-## Redeploy list (all security-touched)
+## Redeploy / upgrade policy
 
-`MovrToken`, `MovrChainAttestation`, `AchievementNFT`, `MovrFeed`, `MovrMilestoneReward`, `MovrStaking`, `ClubMemberNFT`, `MovrClubRegistry`, `ClubTreasury` (new clubs), `MovrClubChallenges`, `ClubBadgeNFT`
+**Stateful contracts are UUPS proxies** (ClubTreasury via **UpgradeableBeacon**).  
+`MovrToken` and `MovrProfile` stay immutable.
 
-Post-deploy wiring:
+| Action | Tool |
+|--------|------|
+| First upgradeable deploy | `./redeploy-all.sh` → `DeployUpgradeableStack.s.sol` |
+| Logic change (no new address) | Multisig confirm → Timelock schedule → wait delay → execute (`UpgradeViaTimelock.s.sol`) |
+| Club treasury logic change | Beacon `upgradeTo` via same Timelock path (`MODE=beacon`) |
+
+Post-deploy wiring (handled by `DeployUpgradeableStack`):
 1. `attestation.setClubRegistry(registry)`
-2. `staking.setClubBadges(badges)`
-3. Optional production: `attestation.setSelfAttestEnabled(false)` + grant `ATTESTER_ROLE` to backend
+2. `staking.setClubBadges(badges)` + `setClubRegistry`
+3. Ownership / `DEFAULT_ADMIN_ROLE` → Timelock; Multisig is Timelock proposer
+4. Optional production: `attestation.setSelfAttestEnabled(false)` + grant `ATTESTER_ROLE` (via Timelock)

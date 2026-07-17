@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {MovrChainAttestation} from "./MovrChainAttestation.sol";
 
 /// @title MovrFeed — community + per-wallet run timeline
 /// @notice Runner publishes after attestRun. Owner can pause publishing (moderation).
-contract MovrFeed is Ownable, Pausable {
+contract MovrFeed is OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     uint256 public constant MAX_NAME_BYTES = 64;
 
     struct Post {
@@ -19,7 +20,7 @@ contract MovrFeed is Ownable, Pausable {
         string runName;
     }
 
-    MovrChainAttestation public immutable attestation;
+    MovrChainAttestation public attestation;
 
     Post[] private _posts;
     mapping(bytes32 => bool) public published;
@@ -29,8 +30,15 @@ contract MovrFeed is Ownable, Pausable {
         uint256 indexed postId, bytes32 indexed runHash, address indexed runner, uint256 distanceMeters, string runName
     );
 
-    constructor(address owner_, address attestation_) Ownable(owner_) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, address attestation_) external initializer {
+        require(owner_ != address(0), "zero");
         require(attestation_ != address(0), "zero");
+        __Ownable_init(owner_);
+        __Pausable_init();
         attestation = MovrChainAttestation(attestation_);
     }
 
@@ -111,4 +119,9 @@ contract MovrFeed is Ownable, Pausable {
             ids[i] = n - 1 - i;
         }
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

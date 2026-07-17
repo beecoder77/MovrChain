@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MovrToken} from "../src/MovrToken.sol";
 import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 import {AchievementNFT} from "../src/AchievementNFT.sol";
@@ -20,9 +21,29 @@ contract DeployMovrChain is Script {
         vm.startBroadcast(pk);
 
         MovrToken movr = new MovrToken(deployer);
-        MovrChainAttestation attestation = new MovrChainAttestation(deployer);
-        AchievementNFT nfts = new AchievementNFT(deployer, address(attestation));
-        MovrStaking staking = new MovrStaking(deployer, address(movr), address(nfts));
+        MovrChainAttestation attestation = MovrChainAttestation(
+            address(
+                new ERC1967Proxy(
+                    address(new MovrChainAttestation()), abi.encodeCall(MovrChainAttestation.initialize, (deployer))
+                )
+            )
+        );
+        AchievementNFT nfts = AchievementNFT(
+            address(
+                new ERC1967Proxy(
+                    address(new AchievementNFT()),
+                    abi.encodeCall(AchievementNFT.initialize, (deployer, address(attestation)))
+                )
+            )
+        );
+        MovrStaking staking = MovrStaking(
+            address(
+                new ERC1967Proxy(
+                    address(new MovrStaking()),
+                    abi.encodeCall(MovrStaking.initialize, (deployer, address(movr), address(nfts)))
+                )
+            )
+        );
 
         // Seed reward pool: 1_000_000 MOVR
         uint256 rewardPool = 1_000_000 ether;

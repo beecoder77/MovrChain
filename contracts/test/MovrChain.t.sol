@@ -6,6 +6,7 @@ import {MovrToken} from "../src/MovrToken.sol";
 import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 import {AchievementNFT} from "../src/AchievementNFT.sol";
 import {MovrStaking} from "../src/MovrStaking.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 
 contract MovrChainTest is Test {
     MovrToken movr;
@@ -19,9 +20,9 @@ contract MovrChainTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         movr = new MovrToken(owner);
-        attestation = new MovrChainAttestation(owner);
-        nfts = new AchievementNFT(owner, address(attestation));
-        staking = new MovrStaking(owner, address(movr), address(nfts));
+        attestation = ProxyDeploy.attestation(owner);
+        nfts = ProxyDeploy.achievementNft(owner, address(attestation));
+        staking = ProxyDeploy.staking(owner, address(movr), address(nfts));
 
         nfts.createAchievement(
             "First Kilometer", "1km single run", AchievementNFT.Criterion.SingleRunMeters, 1000, 500, "ipfs://1k"

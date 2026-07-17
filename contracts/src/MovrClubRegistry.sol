@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ClubTreasury} from "./ClubTreasury.sol";
 import {ClubMemberNFT} from "./ClubMemberNFT.sol";
 
 /// @title MovrClubRegistry — create clubs (≤10 wallets) with a dedicated treasury
-contract MovrClubRegistry {
+contract MovrClubRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public constant MAX_MEMBERS = 10;
     uint256 public constant MAX_NAME = 32;
 
@@ -18,13 +22,14 @@ contract MovrClubRegistry {
         bool isPublic; // public = join without approval; private = request + manager approve
     }
 
-    ClubMemberNFT public immutable memberNft;
-    address public immutable movr;
+    ClubMemberNFT public memberNft;
+    address public movr;
+    address public treasuryBeacon;
     address public staking; // set once; pushed to treasuries
     address public milestoneReward; // set once; pushed to treasuries
     address public challenges; // global challenge contract; pushed to treasuries
 
-    uint256 public nextClubId = 1;
+    uint256 public nextClubId;
     mapping(uint256 => Club) private _clubs;
     mapping(uint256 => address[]) private _members;
     mapping(uint256 => mapping(address => bool)) private _isMember;
@@ -52,10 +57,23 @@ contract MovrClubRegistry {
     event JoinRejected(uint256 indexed clubId, address indexed account, address indexed by);
     event DonationCredited(address indexed donor, uint256 indexed clubId, uint256 amount);
 
-    constructor(address movr_, address memberNft_) {
-        require(movr_ != address(0) && memberNft_ != address(0), "zero");
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, address movr_, address memberNft_, address treasuryBeacon_)
+        external
+        initializer
+    {
+        require(
+            owner_ != address(0) && movr_ != address(0) && memberNft_ != address(0) && treasuryBeacon_ != address(0),
+            "zero"
+        );
+        __Ownable_init(owner_);
         movr = movr_;
         memberNft = ClubMemberNFT(memberNft_);
+        treasuryBeacon = treasuryBeacon_;
+        nextClubId = 1;
     }
 
     function setStaking(address staking_) external {
@@ -115,8 +133,11 @@ contract MovrClubRegistry {
         require(n.length > 0 && n.length <= MAX_NAME, "name");
 
         clubId = nextClubId++;
-        ClubTreasury t = new ClubTreasury(movr, address(this), address(memberNft), clubId);
-        treasury = address(t);
+        bytes memory initData =
+            abi.encodeCall(ClubTreasury.initialize, (movr, address(this), address(memberNft), clubId));
+        BeaconProxy proxy = new BeaconProxy(treasuryBeacon, initData);
+        treasury = address(proxy);
+        ClubTreasury t = ClubTreasury(treasury);
         if (staking != address(0)) {
             t.setStaking(staking);
         }
@@ -328,4 +349,9 @@ contract MovrClubRegistry {
         }
         delete _pendingApplicants[clubId];
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /// @dev Storage gap for future upgrades (append-only layout).
+    uint256[50] private __gap;
 }

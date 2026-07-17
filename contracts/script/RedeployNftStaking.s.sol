@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MovrToken} from "../src/MovrToken.sol";
 import {AchievementNFT} from "../src/AchievementNFT.sol";
 import {MovrStaking} from "../src/MovrStaking.sol";
@@ -23,8 +24,21 @@ contract RedeployNftStaking is Script {
 
         vm.startBroadcast(pk);
 
-        AchievementNFT nfts = new AchievementNFT(deployer, attestation);
-        MovrStaking staking = new MovrStaking(deployer, address(movr), address(nfts));
+        AchievementNFT nfts = AchievementNFT(
+            address(
+                new ERC1967Proxy(
+                    address(new AchievementNFT()), abi.encodeCall(AchievementNFT.initialize, (deployer, attestation))
+                )
+            )
+        );
+        MovrStaking staking = MovrStaking(
+            address(
+                new ERC1967Proxy(
+                    address(new MovrStaking()),
+                    abi.encodeCall(MovrStaking.initialize, (deployer, address(movr), address(nfts)))
+                )
+            )
+        );
 
         if (admin != deployer) {
             nfts.setAdmin(admin, true);

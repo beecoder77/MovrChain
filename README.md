@@ -17,6 +17,7 @@ MovrChain is a Monad-native running tracker built for the post-run check-in. It 
 5. [Security, Validation & Contract Rules](#security-validation--contract-rules)
 6. [Test & Audit Gate](#test--audit-gate)
 7. [Verified Monad Testnet Deployments](#verified-monad-testnet-deployments)
+   - includes [Upgrade Governance (UUPS + Timelock + Multisig)](#upgrade-governance-uups--timelock--multisig)
 8. [Contract Deployment Guide (Monad Testnet)](#contract-deployment-guide-monad-testnet)
 9. [Administrative & Operations Scripts](#administrative--operations-scripts)
 10. [Monad Testnet Network Details](#monad-testnet-network-details)
@@ -176,7 +177,7 @@ The contracts are built using Foundry and are located under `[contracts/src/](co
 | `[AchievementNFT.sol](contracts/src/AchievementNFT.sol)`             | ERC-721 athletic achievements with mint-time boost snapshots and a reentrancy-guarded native `MON` marketplace.                             |
 | `[MovrStaking.sol](contracts/src/MovrStaking.sol)`                   | Principal-separated staking with funded reward reserves, non-retroactive rates, Achievement + ClubBadge boosts, and optional club donation. |
 | `[MovrProfile.sol](contracts/src/MovrProfile.sol)`                   | Unique lowercase handles, runner names, bios, and selected avatar IDs.                                                                      |
-| `[MovrClubRegistry.sol](contracts/src/MovrClubRegistry.sol)`         | Spawns clubs, handles membership rules, and deploys individual `[ClubTreasury.sol](contracts/src/ClubTreasury.sol)` contracts.              |
+| `[MovrClubRegistry.sol](contracts/src/MovrClubRegistry.sol)`         | Spawns clubs and membership; deploys per-club `ClubTreasury` as **BeaconProxy** (shared upgradeable logic). |
 | `[ClubMemberNFT.sol](contracts/src/ClubMemberNFT.sol)`               | Soulbound membership badges confirming club alignment.                                                                                      |
 | `[ClubBadgeNFT.sol](contracts/src/ClubBadgeNFT.sol)`                 | Soulbound club contribution badges whose boosts are consumed by staking.                                                                    |
 | `[MovrClubChallenges.sol](contracts/src/MovrClubChallenges.sol)`     | Manager-controlled, duration-capped treasury challenges with cancel/refund and dust-safe settlement.                                        |
@@ -201,7 +202,7 @@ These are release rules, not optional recommendations:
 9. **Soulbound means lifecycle-complete**: membership NFTs burn on leave; club badges cannot transfer.
 10. **External value calls are guarded**: marketplace and reward/treasury flows use reentrancy protection and checks-effects-interactions.
 11. **Admin powers are bounded and observable**: MOVR has a hard max supply; pause, roles, rates, and funding are explicit contract state.
-12. **Frontend addresses are deployment state**: update `contracts/.env`, root `.env.local`, and `src/lib/contracts.ts` together after every redeploy.
+12. **Proxy addresses are permanent after the UUPS cutover**: update `contracts/.env`, root `.env.local`, and `src/lib/contracts.ts` together **once** after that deploy; later logic changes use Timelock upgrades (no address churn).
 
 The full finding-by-finding reconciliation and test IDs live in `[contracts/TEST_MATRIX.md](contracts/TEST_MATRIX.md)`.
 
@@ -237,7 +238,7 @@ Required pre-deploy checklist:
 
 All addresses below are deployed on chain ID `10143`, have non-empty bytecode, pass representative ABI read calls, and have source code verified on MonadScan. The frontend defaults in `[src/lib/contracts.ts](src/lib/contracts.ts)` and local overrides in `.env.local` must remain synchronized with this registry.
 
-> **Jul 2026 security hardening is live.** Addresses below are from the post-audit redeploy (`redeploy-all.sh` + `verify-all.sh`). MovrToken and MovrProfile were kept; every attestation-dependent contract was redeployed with the fixes in `contracts/TEST_MATRIX.md`.
+> **Jul 2026 security hardening is live on the addresses below** (immutable deploy). Source on branch `feat/uups-upgradeability` converts stateful contracts to **UUPS proxies + ClubTreasury Beacon** under a **2-of-3 Multisig → 24h Timelock**. The next `./redeploy-all.sh` (after setting `MULTISIG_SIGNER_2` / `MULTISIG_SIGNER_3`) is the one-time cutover to stable proxy addresses — after that, logic upgrades must **not** change published addresses or require `contracts.ts` / README edits.
 
 
 | Contract             | Address                                      | Verified source                                                                                    |
@@ -257,9 +258,40 @@ All addresses below are deployed on chain ID `10143`, have non-empty bytecode, p
 
 > **Profile migration:** `0xa16938B26824c3D2aACEb4e25a08937B7fCb202c` is the retired pre-handle profile deployment. It does not implement `setProfile(string,string,string,uint8)` and must not be used by the frontend.
 
+### Upgrade Governance (UUPS + Timelock + Multisig)
+
+Production major updates must **not** redeploy new addresses (that orphans runs, stakes, NFTs, and treasuries). Stateful contracts use:
+
+| Layer | Role |
+| ----- | ---- |
+| **ERC1967Proxy (UUPS)** | Stable address for Attestation, AchievementNFT, Staking, Registry, Member/Badge NFTs, Feed, MilestoneReward, Challenges |
+| **UpgradeableBeacon + BeaconProxy** | Shared ClubTreasury logic for every club |
+| **TimelockController** (default **24h**) | Sole upgrade owner / admin |
+| **MovrMultisig** (2-of-3) | Sole Timelock proposer / canceller / admin |
+
+`MovrToken` and `MovrProfile` remain non-upgradeable.
+
+**Propose an upgrade:**
+
+```bash
+cd contracts
+# After deploying a new implementation:
+TARGET=0xProxyOrBeacon NEW_IMPLEMENTATION=0xNewImpl MODE=uups \  # or MODE=beacon
+MOVR_MULTISIG=0x... TIMELOCK=0x... \
+  forge script script/UpgradeViaTimelock.s.sol:UpgradeViaTimelock \
+  --rpc-url https://testnet-rpc.monad.xyz --broadcast --legacy
+```
+
+1. One Multisig signer runs the script (submits `Timelock.schedule`).
+2. A second signer confirms + executes the Multisig transaction.
+3. Wait `TIMELOCK_DELAY` (default 86400s).
+4. Anyone executes the Timelock operation (`EXECUTE_AFTER_DELAY=1` or Explorer).
+
+Storage layout is **append-only** (`__gap` reserved on each upgradeable contract). Never reorder or remove state variables in an upgrade.
+
 ### Re-check bytecode and source verification
 
-After any deployment, update `contracts/.env`, `.env.local`, and `src/lib/contracts.ts`, then run:
+After the one-time proxy cutover, update `contracts/.env`, `.env.local`, and `src/lib/contracts.ts` **once**, then run:
 
 ```bash
 cd contracts
@@ -295,8 +327,11 @@ Stop if any test fails. The deployment scripts assume the same deployer controls
   cp .env.example .env
   ```
 - Open `contracts/.env` and configure:
-  - `PRIVATE_KEY`: Private key of a funded Monad Testnet deployer wallet.
-  - `ADMIN_ADDRESS`: Optional secondary administrator address.
+  - `PRIVATE_KEY`: Private key of a funded Monad Testnet deployer wallet (also Multisig signer 1).
+  - `MULTISIG_SIGNER_2` / `MULTISIG_SIGNER_3`: two additional distinct Multisig signers (required for `./redeploy-all.sh`).
+  - `ADMIN_ADDRESS`: Optional secondary AchievementNFT admin (pre-Timelock handoff).
+  - `TIMELOCK_DELAY`: Optional seconds (default `86400`).
+  - `MOVR_TOKEN`: existing token to keep.
 
 To request gas money for deployment, visit the [Monad Faucet](https://faucet.monad.xyz/).
 
@@ -312,7 +347,7 @@ For a security-hardening rollout, use the dependency-ordered orchestrator:
 ./redeploy-all.sh
 ```
 
-It redeploys attestation-dependent and club-dependent contracts, funds reward reserves, rewrites `contracts/.env` and root `.env.local`, and preserves only explicitly retained contracts. Review the printed addresses before updating baked frontend fallbacks.
+It deploys the **upgradeable** stack (`DeployUpgradeableStack`): Multisig + Timelock + UUPS proxies + ClubTreasury beacon, funds reward reserves, rewrites `contracts/.env` and root `.env.local`, and preserves `MOVR_TOKEN` / `MOVR_PROFILE`. After this cutover, **do not redeploy to patch logic** — use the Timelock upgrade path so addresses stay stable.
 
 #### A. Core Stack (Token, Attestation, Achievements, Staking)
 
