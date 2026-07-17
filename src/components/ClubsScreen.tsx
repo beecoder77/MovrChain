@@ -46,6 +46,7 @@ import {
   PROFILE_ADDRESS,
 } from "../lib/profile";
 import { EXPLORER_URL } from "../lib/wagmi";
+import { refetchAfterTx } from "../lib/refetchAfterTx";
 import { Alert, Button } from "../design-system/components";
 import {
   usePublicClient,
@@ -54,6 +55,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { monadTestnet } from "viem/chains";
 import { useEffect, useRef, useState } from "react";
 import { isAddress, zeroAddress } from "viem";
@@ -64,10 +66,13 @@ type ClubsScreenProps = {
 };
 
 export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
+  const queryClient = useQueryClient();
+  const handledTx = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [isPublicCreate, setIsPublicCreate] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const deployed = CLUB_REGISTRY !== zeroAddress;
 
   const { data: clubIdRaw, refetch: refetchClubOf } = useReadContract({
@@ -76,7 +81,7 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
     functionName: "clubOf",
     args: [address],
     chainId: monadTestnet.id,
-    query: { enabled: deployed, staleTime: 4_000, refetchOnMount: "always" },
+    query: { enabled: deployed, staleTime: 0, refetchOnMount: "always" },
   });
 
   const clubId = (clubIdRaw as bigint | undefined) ?? 0n;
@@ -87,7 +92,7 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
     functionName: "getClub",
     args: clubId > 0n ? [clubId] : undefined,
     chainId: monadTestnet.id,
-    query: { enabled: deployed && clubId > 0n, staleTime: 4_000 },
+    query: { enabled: deployed && clubId > 0n, staleTime: 0, refetchOnMount: "always" },
   });
 
   const club = clubId > 0n ? parseClub(clubId, clubRaw) : null;
@@ -101,24 +106,75 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
 
   const { writeContract, data: txHash, isPending, error, reset } =
     useWriteContract();
-  const { isLoading: confirming, isSuccess, data: receipt } =
-    useWaitForTransactionReceipt({ hash: txHash, chainId: monadTestnet.id });
+  const {
+    isLoading: confirming,
+    isSuccess,
+    isError: receiptFailed,
+    error: receiptError,
+    data: receipt,
+  } = useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
+  });
 
   useEffect(() => {
     if (error) setWarning(formatWalletError(error));
-  }, [error]);
+    else if (receiptFailed || receipt?.status === "reverted")
+      setWarning(
+        formatWalletError(
+          receiptError ?? new Error("Club transaction reverted on Monad"),
+        ),
+      );
+  }, [error, receiptFailed, receiptError, receipt?.status]);
 
   useEffect(() => {
-    if (!isSuccess || receipt?.status === "reverted") return;
-    void refetchClubOf();
-    void refetchClub();
-    refetchLeaderboard();
-    setName("");
-    setCreateOpen(false);
-    setWarning(null);
-  }, [isSuccess, receipt, refetchClubOf, refetchClub, refetchLeaderboard]);
+    if (!isSuccess || !txHash || receipt?.status === "reverted") return;
+    if (handledTx.current === txHash) return;
+    handledTx.current = txHash;
 
-  const busy = isPending || confirming;
+    let cancelled = false;
+    void (async () => {
+      setSyncing(true);
+      try {
+        await refetchAfterTx(
+          [
+            () => refetchClubOf(),
+            () => refetchClub(),
+            () => refetchLeaderboard(),
+          ],
+          {
+            queryClient,
+            until: async () => {
+              const r = await refetchClubOf();
+              return Number((r.data as bigint | undefined) ?? 0n) > 0;
+            },
+          },
+        );
+        if (cancelled) return;
+        setName("");
+        setCreateOpen(false);
+        setWarning(null);
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isSuccess,
+    txHash,
+    receipt,
+    queryClient,
+    refetchClubOf,
+    refetchClub,
+    refetchLeaderboard,
+  ]);
+
+  const busy = isPending || confirming || syncing;
   const inClub = clubId > 0n;
 
   const handleCreate = () => {
@@ -333,7 +389,11 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
             </label>
           </fieldset>
           <Button block loading={busy} disabled={busy} onClick={handleCreate}>
-            {busy ? "Creating on Monad…" : "Create club + treasury"}
+            {syncing
+              ? "Updating club…"
+              : busy
+                ? "Creating on Monad…"
+                : "Create club + treasury"}
           </Button>
           <Button
             variant="ghost"
@@ -365,6 +425,8 @@ export function ClubDetailScreen({
   onBack,
   onOpenProfile,
 }: ClubDetailProps) {
+  const queryClient = useQueryClient();
+  const handledTx = useRef<string | null>(null);
   const [invite, setInvite] = useState("");
   const [title, setTitle] = useState("");
   const [reason, setReason] = useState("");
@@ -372,6 +434,7 @@ export function ClubDetailScreen({
   const [donateAmount, setDonateAmount] = useState("5");
   const [proposeOpen, setProposeOpen] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const pendingDonateAction = useRef<"approve" | "donate" | null>(null);
   const publicClient = usePublicClient({ chainId: monadTestnet.id });
 
@@ -670,43 +733,84 @@ export function ClubDetailScreen({
 
   const { writeContract, data: txHash, isPending, error, reset } =
     useWriteContract();
-  const { isLoading: confirming, isSuccess, data: receipt } =
-    useWaitForTransactionReceipt({ hash: txHash, chainId: monadTestnet.id });
+  const {
+    isLoading: confirming,
+    isSuccess,
+    isError: receiptFailed,
+    error: receiptError,
+    data: receipt,
+  } = useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
+  });
 
   useEffect(() => {
     if (error) setWarning(formatWalletError(error));
-  }, [error]);
+    else if (receiptFailed || receipt?.status === "reverted")
+      setWarning(
+        formatWalletError(
+          receiptError ?? new Error("Club transaction reverted on Monad"),
+        ),
+      );
+  }, [error, receiptFailed, receiptError, receipt?.status]);
 
   useEffect(() => {
-    if (!isSuccess || receipt?.status === "reverted") return;
-    void refetchClub();
-    void refetchMembers();
-    void refetchBal();
-    void refetchProps();
-    void refetchLatest();
-    void refetchHasVoted();
-    void refetchCanExecute();
-    void refetchVotingClosed();
-    void refetchTopDonors();
-    void donationReads.refetch();
-    void refetchMyDonated();
-    void refetchAllowance();
-    void refetchManager();
-    void refetchChallenges();
-    void adminReads.refetch();
-    void refetchViewerClubOf();
-    void refetchJoinPending();
-    void refetchApplicants();
-    void applicantProfiles.refetch();
-    if (pendingDonateAction.current === "donate") {
-      setDonateAmount("5");
-    }
-    pendingDonateAction.current = null;
-    setProposeOpen(false);
-    setWarning(null);
+    if (!isSuccess || !txHash || receipt?.status === "reverted") return;
+    if (handledTx.current === txHash) return;
+    handledTx.current = txHash;
+
+    let cancelled = false;
+    void (async () => {
+      setSyncing(true);
+      try {
+        await refetchAfterTx(
+          [
+            () => refetchClub(),
+            () => refetchMembers(),
+            () => refetchBal(),
+            () => refetchProps(),
+            () => refetchLatest(),
+            () => refetchHasVoted(),
+            () => refetchCanExecute(),
+            () => refetchVotingClosed(),
+            () => refetchTopDonors(),
+            () => donationReads.refetch(),
+            () => refetchMyDonated(),
+            () => refetchAllowance(),
+            () => refetchManager(),
+            () => refetchChallenges(),
+            () => adminReads.refetch(),
+            () => refetchViewerClubOf(),
+            () => refetchJoinPending(),
+            () => refetchApplicants(),
+            () => applicantProfiles.refetch(),
+          ],
+          {
+            queryClient,
+          },
+        );
+        if (cancelled) return;
+        if (pendingDonateAction.current === "donate") {
+          setDonateAmount("5");
+        }
+        pendingDonateAction.current = null;
+        setProposeOpen(false);
+        setWarning(null);
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     isSuccess,
+    txHash,
     receipt,
+    queryClient,
     refetchClub,
     refetchMembers,
     refetchBal,
@@ -728,7 +832,7 @@ export function ClubDetailScreen({
     applicantProfiles,
   ]);
 
-  const busy = isPending || confirming;
+  const busy = isPending || confirming || syncing;
 
   if (!club) {
     return (

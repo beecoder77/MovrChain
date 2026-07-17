@@ -10,6 +10,7 @@ import { zeroAddress } from "viem";
 import { Alert, Button } from "../design-system/components";
 import { formatWalletError } from "../lib/errors";
 import { EXPLORER_URL } from "../lib/wagmi";
+import { refetchAfterTx } from "../lib/refetchAfterTx";
 import {
   AVATARS,
   MAX_BIO_LEN,
@@ -46,6 +47,7 @@ export function EditProfileScreen({
   const [avatarId, setAvatarId] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (isLoading || hydrated) return;
@@ -94,6 +96,8 @@ export function EditProfileScreen({
   } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
   });
 
   useEffect(() => {
@@ -108,11 +112,20 @@ export function EditProfileScreen({
       return;
     }
 
+    let cancelled = false;
     void (async () => {
-      await queryClient.invalidateQueries();
-      await refetch();
-      onSaved();
+      setSyncing(true);
+      try {
+        await refetchAfterTx([() => refetch()], { queryClient });
+        if (!cancelled) onSaved();
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isSuccess, txHash, receipt, onSaved, refetch, queryClient]);
 
   useEffect(() => {
@@ -122,7 +135,7 @@ export function EditProfileScreen({
     );
   }, [receiptError]);
 
-  const busy = isPending || confirming;
+  const busy = isPending || confirming || syncing;
   const nameOk = name.trim().length > 0 && name.trim().length <= MAX_NAME_LEN;
   const bioOk = bio.length <= MAX_BIO_LEN;
   const handleOk = !handleError && !handleTaken;

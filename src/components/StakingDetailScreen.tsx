@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import { formatUnits } from "viem";
+import { useEffect, useRef, useState } from "react";
+import { formatUnits, zeroAddress } from "viem";
 import {
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { monadTestnet } from "viem/chains";
 import {
   APPROVE_GAS,
@@ -28,8 +29,8 @@ import {
   SET_DONATE_BPS_GAS,
 } from "../lib/clubs";
 import { formatWalletError } from "../lib/errors";
+import { refetchAfterTx } from "../lib/refetchAfterTx";
 import { Alert, Button } from "../design-system/components";
-import { zeroAddress } from "viem";
 
 type StakingDetailScreenProps = {
   /** Stake subject — writes only when equal to viewerAddress */
@@ -43,9 +44,12 @@ export function StakingDetailScreen({
   viewerAddress,
   onBack,
 }: StakingDetailScreenProps) {
+  const queryClient = useQueryClient();
+  const handledTx = useRef<string | null>(null);
   const [amount, setAmount] = useState("10");
   const [donateInput, setDonateInput] = useState("2.5");
   const [warning, setWarning] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const canAct = viewerAddress.toLowerCase() === address.toLowerCase();
   const clubsLive = CLUB_REGISTRY !== zeroAddress;
 
@@ -138,29 +142,58 @@ export function StakingDetailScreen({
     isSuccess,
     isError: receiptFailed,
     error: receiptError,
+    data: receipt,
   } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
   });
 
-  const busy = isPending || confirming;
+  const busy = isPending || confirming || syncing;
+  const receiptReverted = receipt?.status === "reverted";
 
   useEffect(() => {
     if (writeError) setWarning(formatWalletError(writeError));
-    else if (receiptFailed)
-      setWarning(formatWalletError(receiptError ?? new Error("Tx failed")));
-  }, [writeError, receiptFailed, receiptError]);
+    else if (receiptFailed || receiptReverted)
+      setWarning(
+        formatWalletError(receiptError ?? new Error("Transaction reverted on Monad")),
+      );
+  }, [writeError, receiptFailed, receiptError, receiptReverted]);
 
   useEffect(() => {
-    if (!isSuccess) return;
-    void refetchStake();
-    void refetchPending();
-    void refetchBal();
-    void refetchAllowance();
-    void refetchDonate();
-    setWarning(null);
+    if (!isSuccess || !txHash || receiptReverted) return;
+    if (handledTx.current === txHash) return;
+    handledTx.current = txHash;
+
+    let cancelled = false;
+    void (async () => {
+      setSyncing(true);
+      try {
+        await refetchAfterTx(
+          [
+            () => refetchStake(),
+            () => refetchPending(),
+            () => refetchBal(),
+            () => refetchAllowance(),
+            () => refetchDonate(),
+          ],
+          { queryClient },
+        );
+        if (!cancelled) setWarning(null);
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     isSuccess,
+    txHash,
+    receiptReverted,
+    queryClient,
     refetchStake,
     refetchPending,
     refetchBal,

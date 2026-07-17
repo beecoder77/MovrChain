@@ -21,6 +21,7 @@ import { saveRouteFromRun } from "../lib/routes";
 import { RouteMap } from "./RouteMap";
 import { EXPLORER_URL } from "../lib/wagmi";
 import { formatAttestationFailure, isAlreadyAttestedError } from "../lib/errors";
+import { refetchAfterTx } from "../lib/refetchAfterTx";
 import {
   Alert,
   Button,
@@ -37,6 +38,7 @@ import {
   useReadContract,
   usePublicClient,
 } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { monadTestnet } from "viem/chains";
 
 type VerifyClaimProps = {
@@ -71,6 +73,7 @@ export function VerifyClaim({
   onVerified,
   onContinueToFeed,
 }: VerifyClaimProps) {
+  const queryClient = useQueryClient();
   const { address } = useAccount();
   const routeCommit = computeRouteCommit(run);
   const runHash = address
@@ -116,6 +119,8 @@ export function VerifyClaim({
   } = useWaitForTransactionReceipt({
     hash: attestTxHash,
     chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
   });
 
   const {
@@ -134,6 +139,8 @@ export function VerifyClaim({
   } = useWaitForTransactionReceipt({
     hash: publishTxHash,
     chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
   });
 
   const {
@@ -152,6 +159,8 @@ export function VerifyClaim({
   } = useWaitForTransactionReceipt({
     hash: claimTxHash,
     chainId: monadTestnet.id,
+    confirmations: 2,
+    pollingInterval: 1_000,
   });
 
   const [localVerified, setLocalVerified] = useState(false);
@@ -434,6 +443,7 @@ export function VerifyClaim({
       setWarning("Published on-chain, but could not save a local copy.");
     }
     setFinished(true);
+    void refetchAfterTx([() => refetchPublished()], { queryClient });
   }, [
     published,
     milestone,
@@ -444,6 +454,8 @@ export function VerifyClaim({
     publishTxHash,
     claimTxHash,
     attestTxHash,
+    queryClient,
+    refetchPublished,
   ]);
 
   const handleVerify = () => {
