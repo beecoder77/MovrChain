@@ -146,8 +146,28 @@ contract MovrClubTest is Test {
         // After 24h, voting closes even if not everyone voted
         vm.warp(block.timestamp + 24 hours);
         assertTrue(t.votingClosed(pid));
+
+        vm.prank(creator);
+        vm.expectRevert(bytes("closed"));
+        t.vote(pid, false);
+
         assertTrue(t.canExecute(pid));
         t.execute(pid);
+    }
+
+    function testCannotOversubscribeProposals() public {
+        vm.prank(creator);
+        (, address treasury) = registry.createClub("Budget", true);
+
+        movr.mint(creator, 10 ether);
+        ClubTreasury t = ClubTreasury(treasury);
+        vm.startPrank(creator);
+        movr.approve(treasury, 10 ether);
+        t.donate(10 ether);
+        t.propose("A", "first", 6 ether);
+        vm.expectRevert(bytes("amount"));
+        t.propose("B", "over", 5 ether); // only 4 available
+        vm.stopPrank();
     }
 
     function testPublicJoinAndPrivateApproval() public {
@@ -207,5 +227,58 @@ contract MovrClubTest is Test {
         vm.prank(alice);
         vm.expectRevert(bytes("manager"));
         registry.approveJoin(clubId, carol);
+    }
+
+    function testLeaveBurnsNftAndAllowsRejoin() public {
+        vm.prank(creator);
+        (uint256 clubId,) = registry.createClub("Rejoin", true);
+        vm.prank(creator);
+        registry.addMember(clubId, alice);
+        assertTrue(memberNft.holdsMemberNFT(alice, clubId));
+
+        vm.prank(alice);
+        registry.leaveClub(clubId);
+        assertFalse(registry.isMember(clubId, alice));
+        assertEq(registry.clubOf(alice), 0);
+        assertFalse(memberNft.holdsMemberNFT(alice, clubId));
+
+        vm.prank(alice);
+        registry.joinClub(clubId);
+        assertTrue(registry.isMember(clubId, alice));
+        assertTrue(memberNft.holdsMemberNFT(alice, clubId));
+    }
+
+    function testCaptainCannotLeaveWithMembers() public {
+        vm.prank(creator);
+        (uint256 clubId,) = registry.createClub("Stay", true);
+        vm.prank(creator);
+        registry.addMember(clubId, alice);
+
+        vm.prank(creator);
+        vm.expectRevert(bytes("creator"));
+        registry.leaveClub(clubId);
+    }
+
+    function testMemberNftIsSoulbound() public {
+        vm.prank(creator);
+        (uint256 clubId,) = registry.createClub("Bound", true);
+        uint256 tid = memberNft.memberToken(creator, clubId);
+
+        vm.prank(creator);
+        vm.expectRevert(bytes("soulbound"));
+        memberNft.transferFrom(creator, alice, tid);
+    }
+
+    function testRejectJoinClearsPending() public {
+        vm.prank(creator);
+        (uint256 clubId,) = registry.createClub("Private", false);
+
+        vm.prank(alice);
+        registry.requestJoin(clubId);
+        assertTrue(registry.joinPending(clubId, alice));
+
+        vm.prank(creator);
+        registry.rejectJoin(clubId, alice);
+        assertFalse(registry.joinPending(clubId, alice));
     }
 }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Script, console2} from "forge-std/Script.sol";
 import {MovrMilestoneReward} from "../src/MovrMilestoneReward.sol";
 import {MovrClubRegistry} from "../src/MovrClubRegistry.sol";
+import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 
 /// @notice Deploy MovrMilestoneReward and wire club treasury run rewards.
 /// Env: PRIVATE_KEY, MOVR_TOKEN, ATTESTATION, CLUB_REGISTRY (optional but required for club cut)
@@ -21,6 +22,7 @@ contract DeployMilestoneReward is Script {
         MovrMilestoneReward rewards = new MovrMilestoneReward(deployer, movr, attestation);
         if (clubRegistry != address(0)) {
             rewards.setClubRegistry(clubRegistry);
+            MovrChainAttestation(attestation).setClubRegistry(clubRegistry);
             MovrClubRegistry(clubRegistry).setMilestoneReward(address(rewards));
         }
         vm.stopBroadcast();

@@ -11,18 +11,8 @@ contract UpdateAchievementURIs is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         AchievementNFT nfts = AchievementNFT(vm.envAddress("ACHIEVEMENT_NFT"));
 
-        string[10] memory slugs = [
-            "1k",
-            "5k",
-            "10k",
-            "half",
-            "marathon",
-            "streak-7",
-            "streak-14",
-            "streak-30",
-            "total-10k",
-            "century"
-        ];
+        string[10] memory slugs =
+            ["1k", "5k", "10k", "half", "marathon", "streak-7", "streak-14", "streak-30", "total-10k", "century"];
 
         console2.log("Updating URIs on", address(nfts));
 

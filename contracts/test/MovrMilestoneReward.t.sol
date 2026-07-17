@@ -28,6 +28,7 @@ contract MovrMilestoneRewardTest is Test {
         registry = new MovrClubRegistry(address(movr), address(memberNft));
         memberNft.grantRole(memberNft.MINTER_ROLE(), address(registry));
         rewards.setClubRegistry(address(registry));
+        attestation.setClubRegistry(address(registry));
         registry.setMilestoneReward(address(rewards));
         movr.mint(owner, 100_000 ether);
         movr.approve(address(rewards), 10_000 ether);
@@ -104,5 +105,51 @@ contract MovrMilestoneRewardTest is Test {
         rewards.claim(hash);
         assertEq(movr.balanceOf(treasury), 0.5 ether);
         assertEq(ClubTreasury(treasury).lifetimeDonated(runner), 0.5 ether);
+    }
+
+    function testEmptyPoolReverts() public {
+        // Fresh reward contract with no funding
+        vm.prank(owner);
+        MovrMilestoneReward empty = new MovrMilestoneReward(owner, address(movr), address(attestation));
+
+        vm.prank(runner);
+        bytes32 hash = attestation.attestRun(keccak256("empty"), 2000, 700);
+        vm.prank(runner);
+        vm.expectRevert(bytes("empty pool"));
+        empty.claim(hash);
+    }
+
+    function testNonRunnerCannotClaim() public {
+        vm.prank(runner);
+        bytes32 hash = attestation.attestRun(keccak256("mine"), 2000, 700);
+
+        address thief = address(0xDEAD);
+        vm.prank(thief);
+        vm.expectRevert(bytes("not claimable"));
+        rewards.claim(hash);
+    }
+
+    function testJoinAfterAttestDoesNotGetClubCut() public {
+        // Attest while solo — club snapshot is 0
+        vm.prank(runner);
+        bytes32 hash = attestation.attestRun(keccak256("solo-then-join"), 10_000, 3600);
+
+        vm.prank(runner);
+        (, address treasury) = registry.createClub("Late", true);
+
+        uint256 treasuryBefore = movr.balanceOf(treasury);
+        vm.prank(runner);
+        rewards.claim(hash);
+
+        // Runner paid; no club cut (snapshot was 0 at attest)
+        assertEq(movr.balanceOf(treasury), treasuryBefore);
+        assertEq(attestation.clubIdAtAttest(hash), 0);
+    }
+
+    function testWithdrawExcess() public {
+        uint256 before = movr.balanceOf(owner);
+        vm.prank(owner);
+        rewards.withdrawExcess(owner, 100 ether);
+        assertEq(movr.balanceOf(owner), before + 100 ether);
     }
 }

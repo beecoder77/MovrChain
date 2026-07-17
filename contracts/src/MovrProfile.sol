@@ -23,21 +23,10 @@ contract MovrProfile {
     /// @dev keccak256(bytes(lowercaseHandle)) => owner
     mapping(bytes32 => address) private _handleOwner;
 
-    event ProfileUpdated(
-        address indexed account,
-        string handle,
-        string name,
-        uint8 avatarId,
-        uint64 updatedAt
-    );
+    event ProfileUpdated(address indexed account, string handle, string name, uint8 avatarId, uint64 updatedAt);
 
     /// @notice Create or update the caller's profile. Handle must be unique.
-    function setProfile(
-        string calldata handle,
-        string calldata name,
-        string calldata bio,
-        uint8 avatarId
-    ) external {
+    function setProfile(string calldata handle, string calldata name, string calldata bio, uint8 avatarId) external {
         require(avatarId < AVATAR_COUNT, "avatar");
         bytes memory nameBytes = bytes(name);
         bytes memory bioBytes = bytes(bio);
@@ -113,11 +102,7 @@ contract MovrProfile {
         return normalized;
     }
 
-    function _tryNormalizeHandle(string calldata handle)
-        private
-        pure
-        returns (bool ok, string memory normalized)
-    {
+    function _tryNormalizeHandle(string calldata handle) private pure returns (bool ok, string memory normalized) {
         bytes memory raw = bytes(handle);
         uint256 len = raw.length;
         if (len < MIN_HANDLE_BYTES || len > MAX_HANDLE_BYTES) {
@@ -130,9 +115,7 @@ contract MovrProfile {
             if (c >= 0x41 && c <= 0x5A) {
                 // A-Z → a-z
                 out[i] = bytes1(uint8(c) + 32);
-            } else if (
-                (c >= 0x61 && c <= 0x7A) || (c >= 0x30 && c <= 0x39) || c == 0x5F
-            ) {
+            } else if ((c >= 0x61 && c <= 0x7A) || (c >= 0x30 && c <= 0x39) || c == 0x5F) {
                 // a-z, 0-9, _
                 out[i] = c;
             } else {

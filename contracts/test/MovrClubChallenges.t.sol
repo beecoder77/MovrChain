@@ -46,16 +46,13 @@ contract MovrClubChallengesTest is Test {
         vm.stopPrank();
     }
 
+    function _create(uint32 days_, uint256 reward) internal returns (uint256 id) {
+        vm.prank(captain);
+        id = challenges.createChallenge(clubId, "Challenge", MovrClubChallenges.DurationUnit.Days, days_, reward);
+    }
+
     function testCreateSubmitApproveSettle() public {
-        vm.prank(alice);
-        uint256 id = challenges.createChallenge(
-            clubId,
-            "Run every morning before work",
-            MovrClubChallenges.DurationUnit.Days,
-            7,
-            10 ether
-        );
-        assertEq(id, 1);
+        uint256 id = _create(7, 10 ether);
 
         vm.prank(alice);
         challenges.submitCompletion(id);
@@ -72,11 +69,14 @@ contract MovrClubChallengesTest is Test {
         assertFalse(challenges.isActive(id));
     }
 
-    function testNonManagerCannotApprove() public {
+    function testNonManagerCannotCreate() public {
         vm.prank(alice);
-        uint256 id = challenges.createChallenge(
-            clubId, "Sprint week", MovrClubChallenges.DurationUnit.Hours, 24, 1 ether
-        );
+        vm.expectRevert(bytes("manager"));
+        challenges.createChallenge(clubId, "Nope", MovrClubChallenges.DurationUnit.Days, 7, 1 ether);
+    }
+
+    function testNonManagerCannotApprove() public {
+        uint256 id = _create(1, 1 ether);
 
         vm.prank(alice);
         challenges.submitCompletion(id);
@@ -84,5 +84,130 @@ contract MovrClubChallengesTest is Test {
         vm.prank(alice);
         vm.expectRevert(bytes("manager"));
         challenges.approveCompletion(id, alice);
+    }
+
+    function testRejectThenResubmit() public {
+        uint256 id = _create(3, 2 ether);
+
+        vm.prank(alice);
+        challenges.submitCompletion(id);
+
+        vm.prank(admin);
+        challenges.rejectCompletion(id, alice);
+        assertEq(uint8(challenges.completionStatus(id, alice)), uint8(MovrClubChallenges.CompletionStatus.Rejected));
+
+        vm.prank(alice);
+        challenges.submitCompletion(id);
+        assertEq(uint8(challenges.completionStatus(id, alice)), uint8(MovrClubChallenges.CompletionStatus.Pending));
+    }
+
+    function testRevokeApproval() public {
+        uint256 id = _create(3, 2 ether);
+        vm.prank(alice);
+        challenges.submitCompletion(id);
+        vm.prank(admin);
+        challenges.approveCompletion(id, alice);
+
+        (,,,,,,,,, uint256 approved) = challenges.getChallenge(id);
+        assertEq(approved, 1);
+
+        vm.prank(admin);
+        challenges.revokeApproval(id, alice);
+        assertEq(uint8(challenges.completionStatus(id, alice)), uint8(MovrClubChallenges.CompletionStatus.Rejected));
+        (,,,,,,,,, approved) = challenges.getChallenge(id);
+        assertEq(approved, 0);
+    }
+
+    function testCancelRefundsTreasury() public {
+        uint256 treasuryBefore = movr.balanceOf(treasury);
+        uint256 id = _create(7, 5 ether);
+        assertEq(movr.balanceOf(treasury), treasuryBefore - 5 ether);
+
+        vm.prank(captain);
+        challenges.cancelChallenge(id);
+
+        assertEq(movr.balanceOf(treasury), treasuryBefore);
+        (,,,,,,,, MovrClubChallenges.ChallengeState state,) = challenges.getChallenge(id);
+        assertEq(uint8(state), uint8(MovrClubChallenges.ChallengeState.Cancelled));
+    }
+
+    function testSettleZeroWinnersRefundsTreasury() public {
+        uint256 treasuryBefore = movr.balanceOf(treasury);
+        uint256 id = _create(1, 5 ether);
+        assertEq(movr.balanceOf(treasury), treasuryBefore - 5 ether);
+
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(captain);
+        challenges.settle(id);
+
+        assertEq(movr.balanceOf(treasury), treasuryBefore);
+        assertFalse(challenges.isActive(id));
+    }
+
+    function testSettleDustRefundsTreasury() public {
+        // 2 wei pool with 3 approved winners → each==0; must refund not lock
+        uint256 id = _create(1, 2);
+        vm.prank(alice);
+        challenges.submitCompletion(id);
+        vm.prank(admin);
+        challenges.submitCompletion(id);
+        vm.prank(captain);
+        challenges.submitCompletion(id);
+
+        vm.prank(captain);
+        challenges.approveCompletion(id, alice);
+        vm.prank(captain);
+        challenges.approveCompletion(id, admin);
+        vm.prank(captain);
+        challenges.approveCompletion(id, captain);
+
+        uint256 treasuryBefore = movr.balanceOf(treasury);
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(captain);
+        challenges.settle(id);
+
+        assertEq(movr.balanceOf(treasury), treasuryBefore + 2);
+    }
+
+    function testMultipleWinnersSplitRemainder() public {
+        uint256 id = _create(2, 10 ether);
+
+        vm.prank(alice);
+        challenges.submitCompletion(id);
+        vm.prank(admin);
+        challenges.submitCompletion(id);
+
+        vm.prank(captain);
+        challenges.approveCompletion(id, alice);
+        vm.prank(captain);
+        challenges.approveCompletion(id, admin);
+
+        vm.warp(block.timestamp + 3 days);
+        uint256 treasuryBefore = movr.balanceOf(treasury);
+        vm.prank(captain);
+        challenges.settle(id);
+
+        assertEq(movr.balanceOf(alice), 5 ether);
+        assertEq(movr.balanceOf(admin), 5 ether);
+        assertEq(movr.balanceOf(treasury), treasuryBefore);
+    }
+
+    function testNonMemberCannotSubmit() public {
+        uint256 id = _create(1, 1 ether);
+
+        address outsider = address(0x0F);
+        vm.prank(outsider);
+        vm.expectRevert(bytes("member"));
+        challenges.submitCompletion(id);
+    }
+
+    function testRejectsOverlongDuration() public {
+        vm.prank(captain);
+        vm.expectRevert(bytes("duration"));
+        challenges.createChallenge(clubId, "Too long", MovrClubChallenges.DurationUnit.Days, 91, 1 ether);
+
+        vm.prank(captain);
+        vm.expectRevert(bytes("duration"));
+        challenges.createChallenge(clubId, "Too many months", MovrClubChallenges.DurationUnit.Months, 4, 1 ether);
     }
 }

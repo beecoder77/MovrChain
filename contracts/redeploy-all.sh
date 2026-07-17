@@ -40,8 +40,8 @@ STAKING_POOL="${STAKING_POOL:-1000000000000000000000000}"   # 1,000,000 MOVR
 MILESTONE_POOL="${MILESTONE_POOL:-100000000000000000000000}" # 100,000 MOVR
 
 # Known addresses from the partial step-1 deploy (override via env if needed)
-PARTIAL_ATTESTATION="${ATTESTATION_OVERRIDE:-0x70FA6Fa42741f2890647e42a8cBE102FefD65c38}"
-PARTIAL_ACHIEVEMENT_NFT="${ACHIEVEMENT_NFT_OVERRIDE:-0xf54b551c5DEc5E5da56cBB9364cC7F12Ce38043e}"
+PARTIAL_ATTESTATION="${ATTESTATION_OVERRIDE:-0x4FcC7b8d7334289d548183694C04d67aA366cC7E}"
+PARTIAL_ACHIEVEMENT_NFT="${ACHIEVEMENT_NFT_OVERRIDE:-0x4b5eFbb1499423Ff1a315f699dAA9A059639077a}"
 
 echo "Deployer:   $DEPLOYER"
 echo "MOVR_TOKEN: $MOVR_TOKEN (kept)"
@@ -108,7 +108,7 @@ print(p.read_text().rstrip("\n"), end="")
 PY
 }
 
-# Criterion: 0=SingleRunMeters, 1=StreakDays, 2=TotalDistanceMeters
+# Criterion: 0=SingleRunMeters, 1=TotalDistanceMeters, 2=StreakDays
 # Monad charges gas_limit (not gas_used) — estimate then add 50% headroom instead of a huge fixed limit.
 create_achievement() {
   local nft="$1" name="$2" desc="$3" criterion="$4" threshold="$5" boost="$6" slug="$7"
@@ -136,23 +136,23 @@ finish_seeds() { # nft_address — create any missing catalog entries (idempoten
   # Catalog order matches DeployAttestation._seedAchievements (ids 1..10).
   # nextAchievementId is the next free id; 5 seeds landed → next=6.
   if (( next == 6 )); then
-    create_achievement "$nft" "7-Day Streak" "Run at least 1 km per day for 7 consecutive days" 1 7 700 streak-7
+    create_achievement "$nft" "7-Day Streak" "Run at least 1 km per day for 7 consecutive days" 2 7 700 streak-7
     next=$(next_id)
   fi
   if (( next == 7 )); then
-    create_achievement "$nft" "14-Day Streak" "Run at least 1 km per day for 14 consecutive days" 1 14 1200 streak-14
+    create_achievement "$nft" "14-Day Streak" "Run at least 1 km per day for 14 consecutive days" 2 14 1200 streak-14
     next=$(next_id)
   fi
   if (( next == 8 )); then
-    create_achievement "$nft" "30-Day Streak" "Run at least 1 km per day for 30 consecutive days" 1 30 2000 streak-30
+    create_achievement "$nft" "30-Day Streak" "Run at least 1 km per day for 30 consecutive days" 2 30 2000 streak-30
     next=$(next_id)
   fi
   if (( next == 9 )); then
-    create_achievement "$nft" "Double Digits Total" "Accumulate 10 km across all verified runs" 2 10000 400 total-10k
+    create_achievement "$nft" "Double Digits Total" "Accumulate 10 km across all verified runs" 1 10000 400 total-10k
     next=$(next_id)
   fi
   if (( next == 10 )); then
-    create_achievement "$nft" "Century Club" "Accumulate 100 km across all verified runs" 2 100000 1500 century
+    create_achievement "$nft" "Century Club" "Accumulate 100 km across all verified runs" 1 100000 1500 century
     next=$(next_id)
   fi
   echo "  nextAchievementId=$next after seeding"

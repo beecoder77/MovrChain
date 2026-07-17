@@ -9,9 +9,7 @@ interface IClubRegistryChallenges {
     function isMember(uint256 clubId, address account) external view returns (bool);
     function isClubManager(uint256 clubId, address account) external view returns (bool);
     function members(uint256 clubId) external view returns (address[] memory);
-    function getClub(
-        uint256 clubId
-    )
+    function getClub(uint256 clubId)
         external
         view
         returns (
@@ -29,12 +27,17 @@ interface IClubTreasuryChallenges {
     function lockChallengeFunds(uint256 amount) external;
 }
 
-/// @title MovrClubChallenges — member challenges with manager approval + treasury reward split
+/// @title MovrClubChallenges — manager challenges with approval + treasury reward split
 contract MovrClubChallenges is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_RULE = 280;
-    uint256 public constant MAX_DURATION = 365;
+    /// @notice Max span for Hours / Days units (value of `duration`).
+    uint256 public constant MAX_DURATION = 90;
+    /// @notice Months capped separately so escrow cannot stretch to decades.
+    uint256 public constant MAX_MONTHS = 3;
+    /// @notice Absolute ceiling (~90 days) regardless of unit.
+    uint64 public constant MAX_DURATION_SECONDS = 90 days;
 
     enum DurationUnit {
         Hours,
@@ -90,6 +93,7 @@ contract MovrClubChallenges is ReentrancyGuard {
     event CompletionApproved(uint256 indexed challengeId, address indexed member, address indexed approver);
     event CompletionRejected(uint256 indexed challengeId, address indexed member, address indexed approver);
     event ChallengeSettled(uint256 indexed challengeId, uint256 winners, uint256 payoutEach);
+    event ChallengeCancelled(uint256 indexed challengeId, address indexed by, uint256 refunded);
 
     constructor(address movr_, address registry_) {
         require(movr_ != address(0) && registry_ != address(0), "zero");
@@ -127,16 +131,7 @@ contract MovrClubChallenges is ReentrancyGuard {
     {
         Challenge storage c = _challengeAt(challengeId);
         return (
-            c.clubId,
-            c.creator,
-            c.rule,
-            c.unit,
-            c.duration,
-            c.rewardPool,
-            c.startAt,
-            c.endAt,
-            c.state,
-            c.approvedCount
+            c.clubId, c.creator, c.rule, c.unit, c.duration, c.rewardPool, c.startAt, c.endAt, c.state, c.approvedCount
         );
     }
 
@@ -146,27 +141,33 @@ contract MovrClubChallenges is ReentrancyGuard {
         return c.state == ChallengeState.Active && block.timestamp < c.endAt;
     }
 
-    /// @notice Any member can start a challenge; reward MOVR is escrowed from club treasury.
+    /// @notice Captain/admin only. Reward MOVR is escrowed from club treasury (≤90 days).
     function createChallenge(
         uint256 clubId,
         string calldata rule,
         DurationUnit unit,
         uint32 duration,
         uint256 rewardAmount
-    ) external returns (uint256 challengeId) {
-        require(registry.isMember(clubId, msg.sender), "member");
+    ) external nonReentrant returns (uint256 challengeId) {
+        require(registry.isClubManager(clubId, msg.sender), "manager");
         bytes memory r = bytes(rule);
         require(r.length > 0 && r.length <= MAX_RULE, "rule");
-        require(duration > 0 && duration <= MAX_DURATION, "duration");
         require(rewardAmount > 0, "reward");
+        if (unit == DurationUnit.Months) {
+            require(duration > 0 && duration <= MAX_MONTHS, "duration");
+        } else {
+            require(duration > 0 && duration <= MAX_DURATION, "duration");
+        }
 
-        (, , address treasury, , bool exists, , ) = registry.getClub(clubId);
+        (,, address treasury,, bool exists,,) = registry.getClub(clubId);
         require(exists && treasury != address(0), "club");
 
-        IClubTreasuryChallenges(treasury).lockChallengeFunds(rewardAmount);
-
         uint64 startAt = uint64(block.timestamp);
-        uint64 endAt = startAt + _durationSeconds(unit, duration);
+        uint64 span = _durationSeconds(unit, duration);
+        require(span > 0 && span <= MAX_DURATION_SECONDS, "span");
+        uint64 endAt = startAt + span;
+
+        IClubTreasuryChallenges(treasury).lockChallengeFunds(rewardAmount);
 
         challengeId = nextChallengeId++;
         _challenges.push(
@@ -185,9 +186,25 @@ contract MovrClubChallenges is ReentrancyGuard {
         );
         _clubChallengeIds[clubId].push(challengeId);
 
-        emit ChallengeCreated(
-            challengeId, clubId, msg.sender, rule, uint8(unit), duration, rewardAmount, endAt
-        );
+        emit ChallengeCreated(challengeId, clubId, msg.sender, rule, uint8(unit), duration, rewardAmount, endAt);
+    }
+
+    /// @notice Manager or creator can unlock escrow before settle (active challenges only).
+    function cancelChallenge(uint256 challengeId) external nonReentrant {
+        require(challengeId > 0 && challengeId < nextChallengeId, "id");
+        Challenge storage c = _challenges[challengeId - 1];
+        require(c.state == ChallengeState.Active, "state");
+        require(registry.isClubManager(c.clubId, msg.sender) || msg.sender == c.creator, "auth");
+
+        c.state = ChallengeState.Cancelled;
+        uint256 pool = c.rewardPool;
+        c.rewardPool = 0;
+
+        (,, address treasury,,,,) = registry.getClub(c.clubId);
+        if (pool > 0 && treasury != address(0)) {
+            movr.safeTransfer(treasury, pool);
+        }
+        emit ChallengeCancelled(challengeId, msg.sender, pool);
     }
 
     function submitCompletion(uint256 challengeId) external {
@@ -209,6 +226,16 @@ contract MovrClubChallenges is ReentrancyGuard {
         emit CompletionApproved(challengeId, member, msg.sender);
     }
 
+    /// @notice Manager can revoke an approval before deadline (reduces dust-lock risk).
+    function revokeApproval(uint256 challengeId, address member) external {
+        Challenge storage c = _requireActive(challengeId);
+        require(registry.isClubManager(c.clubId, msg.sender), "manager");
+        require(completionStatus[challengeId][member] == CompletionStatus.Approved, "approved");
+        completionStatus[challengeId][member] = CompletionStatus.Rejected;
+        c.approvedCount -= 1;
+        emit CompletionRejected(challengeId, member, msg.sender);
+    }
+
     function rejectCompletion(uint256 challengeId, address member) external {
         Challenge storage c = _requireActive(challengeId);
         require(registry.isClubManager(c.clubId, msg.sender), "manager");
@@ -226,18 +253,18 @@ contract MovrClubChallenges is ReentrancyGuard {
 
         c.state = ChallengeState.Settled;
 
-        (, , address treasury, , , , ) = registry.getClub(c.clubId);
+        (,, address treasury,,,,) = registry.getClub(c.clubId);
         uint256 winners = c.approvedCount;
         uint256 pool = c.rewardPool;
+        c.rewardPool = 0;
 
-        if (winners == 0) {
-            movr.safeTransfer(treasury, pool);
+        if (winners == 0 || pool / winners == 0) {
+            if (pool > 0) movr.safeTransfer(treasury, pool);
             emit ChallengeSettled(challengeId, 0, 0);
             return;
         }
 
         uint256 each = pool / winners;
-        require(each > 0, "dust");
 
         address[] memory roster = registry.members(c.clubId);
         uint256 paid;

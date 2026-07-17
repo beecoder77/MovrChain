@@ -14,7 +14,7 @@ contract DeployMovrFeed is Script {
         console2.log("Attestation:", attestation);
 
         vm.startBroadcast(pk);
-        MovrFeed feed = new MovrFeed(attestation);
+        MovrFeed feed = new MovrFeed(vm.addr(pk), attestation);
         vm.stopBroadcast();
 
         console2.log("=== Deployed ===");

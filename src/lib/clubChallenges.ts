@@ -7,6 +7,7 @@ export const CREATE_CHALLENGE_GAS = 850_000n;
 export const SUBMIT_CHALLENGE_GAS = 350_000n;
 export const APPROVE_CHALLENGE_GAS = 400_000n;
 export const SETTLE_CHALLENGE_GAS = 550_000n;
+export const CANCEL_CHALLENGE_GAS = 350_000n;
 export const SET_CLUB_ADMIN_GAS = 120_000n;
 
 export const DurationUnit = {
@@ -82,6 +83,23 @@ export const CLUB_CHALLENGES_ABI = [
       { name: "challengeId", type: "uint256" },
       { name: "member", type: "address" },
     ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "revokeApproval",
+    inputs: [
+      { name: "challengeId", type: "uint256" },
+      { name: "member", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "cancelChallenge",
+    inputs: [{ name: "challengeId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",
   },

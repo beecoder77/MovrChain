@@ -16,6 +16,7 @@ contract ClubBadgeNFT is ERC721, AccessControl {
         SquadOf5, // 3
         FullRoster, // 4
         Consensus // 5 — cast ≥3 votes
+
     }
 
     MovrClubRegistry public immutable registry;
@@ -41,12 +42,7 @@ contract ClubBadgeNFT is ERC721, AccessControl {
         stakingBoostBps[uint8(Badge.Consensus)] = 300;
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, AccessControl)
-        returns (bool)
-    {
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 
@@ -71,5 +67,14 @@ contract ClubBadgeNFT is ERC721, AccessControl {
         if (boost > 0) accountBoostBps[msg.sender] += boost;
         _safeMint(msg.sender, tokenId);
         emit BadgeClaimed(msg.sender, badge, tokenId);
+    }
+
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
+        from = _ownerOf(tokenId);
+        // Soulbound: mint and burn only — blocks boost/eligibility drift on transfer.
+        if (from != address(0) && to != address(0)) {
+            revert("soulbound");
+        }
+        return super._update(to, tokenId, auth);
     }
 }

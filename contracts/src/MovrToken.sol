@@ -5,9 +5,12 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title MOVR — MovrChain ecosystem token
-/// @notice Mintable ERC-20. Contract owner (DEFAULT_ADMIN) can mint and assign ADMIN_ROLE.
+/// @notice Mintable ERC-20 with a hard max supply (1B MOVR).
 contract MovrToken is ERC20, AccessControl {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+
+    /// @notice Hard cap: 1_000_000_000 MOVR (18 decimals).
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 ether;
 
     constructor(address owner_) ERC20("MovrChain", "MOVR") {
         require(owner_ != address(0), "owner=0");
@@ -15,12 +18,12 @@ contract MovrToken is ERC20, AccessControl {
         _grantRole(ADMIN_ROLE, owner_);
     }
 
-    /// @notice Mint MOVR — owner only
+    /// @notice Mint MOVR — owner only, cannot exceed MAX_SUPPLY
     function mint(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(totalSupply() + amount <= MAX_SUPPLY, "cap");
         _mint(to, amount);
     }
 
-    /// @notice Assign or revoke ADMIN_ROLE
     function setAdmin(address account, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (enabled) {
             _grantRole(ADMIN_ROLE, account);

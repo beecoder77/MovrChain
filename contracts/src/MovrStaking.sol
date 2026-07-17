@@ -6,11 +6,12 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AchievementNFT} from "./AchievementNFT.sol";
+import {ClubBadgeNFT} from "./ClubBadgeNFT.sol";
 import {ClubTreasury} from "./ClubTreasury.sol";
 import {MovrClubRegistry} from "./MovrClubRegistry.sol";
 
-/// @title MovrStaking — stake MOVR; achievements boost rewards; optional club yield donate
-/// @notice On claim, donateBps (200–500 or 0) of rewards go to the member's club treasury.
+/// @title MovrStaking — stake MOVR; achievement + club-badge boosts; optional club yield donate
+/// @notice Accrual uses a per-user `lockedRate` so `configureRates` only affects future intervals.
 contract MovrStaking is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -22,6 +23,7 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
     IERC20 public immutable movr;
     AchievementNFT public immutable achievements;
     MovrClubRegistry public clubRegistry;
+    ClubBadgeNFT public clubBadges;
 
     uint256 public rewardPerTokenPerSecond;
     uint256 public maxBoostBps = 10_000;
@@ -32,12 +34,14 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         uint256 amount;
         uint256 rewardDebt;
         uint256 lastUpdate;
+        /// @notice Effective (boosted) rate locked at last harvest — used for the next interval.
+        uint256 lockedRate;
     }
 
     mapping(address => StakeInfo) public stakes;
     uint256 public totalStaked;
+    uint256 public rewardReserve;
 
-    /// @notice 0 = off; else 200–500 basis points of claim to club treasury
     mapping(address => uint16) public donateBps;
 
     event Staked(address indexed user, uint256 amount);
@@ -46,6 +50,9 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
     event RatesUpdated(uint256 rewardPerTokenPerSecond, uint256 maxBoostBps, uint256 baseAchievementBoostBps);
     event DonatePrefsUpdated(address indexed user, uint16 bps);
     event ClubRegistrySet(address indexed registry);
+    event ClubBadgesSet(address indexed badges);
+    event RewardsFunded(uint256 amount, uint256 rewardReserve);
+    event ExcessWithdrawn(address indexed to, uint256 amount);
 
     constructor(address owner_, address movr_, address achievements_) {
         require(owner_ != address(0) && movr_ != address(0) && achievements_ != address(0), "zero");
@@ -63,11 +70,18 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         emit ClubRegistrySet(registry_);
     }
 
+    function setClubBadges(address badges_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(badges_ != address(0), "zero");
+        clubBadges = ClubBadgeNFT(badges_);
+        emit ClubBadgesSet(badges_);
+    }
+
     function setAdmin(address account, bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (enabled) _grantRole(ADMIN_ROLE, account);
         else _revokeRole(ADMIN_ROLE, account);
     }
 
+    /// @notice Updates global rates for **future** accrual only (after each user's next harvest boundary).
     function configureRates(
         uint256 rewardPerTokenPerSecond_,
         uint256 maxBoostBps_,
@@ -82,16 +96,27 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
     }
 
     function fundRewards(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(amount > 0, "amount");
         movr.safeTransferFrom(msg.sender, address(this), amount);
+        rewardReserve += amount;
+        emit RewardsFunded(amount, rewardReserve);
     }
 
-    /// @notice Turn on/off automatic yield donate to your club treasury (200–500 bps, or 0 = off).
+    /// @notice Withdraw MOVR above stakes + reward reserve (ops rescue).
+    function withdrawExcess(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(to != address(0) && amount > 0, "bad");
+        uint256 bal = movr.balanceOf(address(this));
+        uint256 locked = totalStaked + rewardReserve;
+        require(bal > locked && amount <= bal - locked, "excess");
+        movr.safeTransfer(to, amount);
+        emit ExcessWithdrawn(to, amount);
+    }
+
     function setDonateBps(uint16 bps) external {
         require(bps == 0 || (bps >= MIN_DONATE_BPS && bps <= MAX_DONATE_BPS), "bps");
         if (bps > 0) {
             require(address(clubRegistry) != address(0), "registry");
-            uint256 clubId = clubRegistry.clubOf(msg.sender);
-            require(clubId != 0, "no club");
+            require(clubRegistry.clubOf(msg.sender) != 0, "no club");
         }
         donateBps[msg.sender] = bps;
         emit DonatePrefsUpdated(msg.sender, bps);
@@ -103,15 +128,23 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         } else {
             boost = achievements.ownedAchievementCount(account) * baseAchievementBoostBps;
         }
+        if (address(clubBadges) != address(0)) {
+            boost += clubBadges.accountBoostBps(account);
+        }
         if (boost > maxBoostBps) boost = maxBoostBps;
+    }
+
+    function _liveRate(address account) internal view returns (uint256) {
+        uint256 boost = boostBpsOf(account);
+        return rewardPerTokenPerSecond + (rewardPerTokenPerSecond * boost) / 10_000;
     }
 
     function pendingReward(address account) public view returns (uint256) {
         StakeInfo memory s = stakes[account];
         if (s.amount == 0) return s.rewardDebt;
         uint256 elapsed = block.timestamp - s.lastUpdate;
-        uint256 boost = boostBpsOf(account);
-        uint256 rate = rewardPerTokenPerSecond + (rewardPerTokenPerSecond * boost) / 10_000;
+        uint256 rate = s.lockedRate;
+        if (rate == 0) rate = _liveRate(account);
         uint256 accrued = (s.amount * rate * elapsed) / 1e18;
         return s.rewardDebt + accrued;
     }
@@ -120,11 +153,13 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         StakeInfo storage s = stakes[account];
         if (s.amount > 0 && s.lastUpdate > 0) {
             uint256 elapsed = block.timestamp - s.lastUpdate;
-            uint256 boost = boostBpsOf(account);
-            uint256 rate = rewardPerTokenPerSecond + (rewardPerTokenPerSecond * boost) / 10_000;
+            uint256 rate = s.lockedRate;
+            if (rate == 0) rate = _liveRate(account);
             s.rewardDebt += (s.amount * rate * elapsed) / 1e18;
         }
         s.lastUpdate = block.timestamp;
+        // Lock the *current* live rate for the next interval (post any configureRates).
+        s.lockedRate = _liveRate(account);
     }
 
     function stake(uint256 amount) external nonReentrant {
@@ -150,8 +185,10 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         _harvest(msg.sender);
         uint256 reward = stakes[msg.sender].rewardDebt;
         require(reward > 0, "none");
-        stakes[msg.sender].rewardDebt = 0;
-        require(movr.balanceOf(address(this)) >= reward + totalStaked, "insufficient rewards");
+        uint256 payableReward = reward > rewardReserve ? rewardReserve : reward;
+        require(payableReward > 0, "insufficient rewards");
+        stakes[msg.sender].rewardDebt = reward - payableReward;
+        rewardReserve -= payableReward;
 
         uint16 bps = donateBps[msg.sender];
         uint256 donated;
@@ -159,8 +196,8 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
         if (bps > 0 && address(clubRegistry) != address(0)) {
             uint256 clubId = clubRegistry.clubOf(msg.sender);
             if (clubId != 0) {
-                (, , treasury,,,,) = clubRegistry.getClub(clubId);
-                donated = (reward * uint256(bps)) / 10_000;
+                (,, treasury,,,,) = clubRegistry.getClub(clubId);
+                donated = (payableReward * uint256(bps)) / 10_000;
                 if (donated > 0 && treasury != address(0)) {
                     movr.safeTransfer(treasury, donated);
                     ClubTreasury(treasury).recordDonation(msg.sender, donated);
@@ -171,7 +208,7 @@ contract MovrStaking is AccessControl, ReentrancyGuard {
             }
         }
 
-        uint256 kept = reward - donated;
+        uint256 kept = payableReward - donated;
         if (kept > 0) {
             movr.safeTransfer(msg.sender, kept);
         }

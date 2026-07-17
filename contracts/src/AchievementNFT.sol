@@ -4,12 +4,13 @@ pragma solidity ^0.8.24;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {MovrChainAttestation} from "./MovrChainAttestation.sol";
 
 /// @title AchievementNFT — community achievements as NFTs
 /// @notice Admin creates achievement definitions. Runners claim when attestation stats qualify.
 ///         Owners can list NFTs for sale in native MON.
-contract AchievementNFT is ERC721URIStorage, AccessControl {
+contract AchievementNFT is ERC721URIStorage, AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     enum Criterion {
@@ -41,13 +42,13 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
     mapping(uint256 => string) private _achievementURI;
     mapping(address => mapping(uint256 => bool)) public hasClaimed;
     mapping(uint256 => uint256) public tokenAchievementId;
+    /// @notice Boost bps snapshotted at mint — immune to later `setAchievementBoost` edits.
+    mapping(uint256 => uint256) public tokenBoostBps;
     mapping(address => uint256) public accountBoostBps;
     mapping(address => uint256) public ownedAchievementCount;
     mapping(uint256 => Listing) public listings;
 
-    event AchievementCreated(
-        uint256 indexed achievementId, string name, Criterion criterion, uint256 threshold
-    );
+    event AchievementCreated(uint256 indexed achievementId, string name, Criterion criterion, uint256 threshold);
     event AchievementClaimed(address indexed runner, uint256 indexed achievementId, uint256 indexed tokenId);
     event Listed(uint256 indexed tokenId, address indexed seller, uint256 priceWei);
     event Unlisted(uint256 indexed tokenId);
@@ -102,19 +103,14 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
         achievements[achievementId].active = active;
     }
 
-    function setAchievementBoost(uint256 achievementId, uint256 stakingBoostBps)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
+    /// @notice Updates boost for *future* mints only. Already-minted tokens keep `tokenBoostBps`.
+    function setAchievementBoost(uint256 achievementId, uint256 stakingBoostBps) external onlyRole(ADMIN_ROLE) {
         require(achievementId > 0 && achievementId < nextAchievementId, "unknown");
         achievements[achievementId].stakingBoostBps = stakingBoostBps;
     }
 
     /// @notice Update metadata URI used for future mints of this achievement.
-    function setAchievementURI(uint256 achievementId, string calldata tokenURI_)
-        external
-        onlyRole(ADMIN_ROLE)
-    {
+    function setAchievementURI(uint256 achievementId, string calldata tokenURI_) external onlyRole(ADMIN_ROLE) {
         require(achievementId > 0 && achievementId < nextAchievementId, "unknown");
         require(bytes(tokenURI_).length > 0, "uri");
         _achievementURI[achievementId] = tokenURI_;
@@ -135,13 +131,8 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
         AchievementDef memory a = achievements[achievementId];
         if (!a.active || hasClaimed[runner][achievementId]) return false;
 
-        (
-            uint256 totalDistanceMeters,
-            ,
-            uint256 bestSingleRunMeters,
-            uint256 currentStreakDays,
-            uint256 longestStreakDays,
-        ) = attestation.runnerStats(runner);
+        (uint256 totalDistanceMeters,, uint256 bestSingleRunMeters,,,) = attestation.runnerStats(runner);
+        uint256 currentStreakDays = attestation.effectiveCurrentStreakDays(runner);
 
         if (a.criterion == Criterion.SingleRunMeters) {
             return bestSingleRunMeters >= a.threshold;
@@ -149,7 +140,8 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
         if (a.criterion == Criterion.TotalDistanceMeters) {
             return totalDistanceMeters >= a.threshold;
         }
-        return currentStreakDays >= a.threshold || longestStreakDays >= a.threshold;
+        // Active streak only — historical longest does not keep eligibility after idle decay.
+        return currentStreakDays >= a.threshold;
     }
 
     function claimAchievement(uint256 achievementId) external returns (uint256 tokenId) {
@@ -157,11 +149,7 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
         tokenId = _mintAchievement(msg.sender, achievementId);
     }
 
-    function adminMint(address to, uint256 achievementId)
-        external
-        onlyRole(ADMIN_ROLE)
-        returns (uint256 tokenId)
-    {
+    function adminMint(address to, uint256 achievementId) external onlyRole(ADMIN_ROLE) returns (uint256 tokenId) {
         require(achievementId > 0 && achievementId < nextAchievementId, "unknown");
         require(!hasClaimed[to][achievementId], "already claimed");
         tokenId = _mintAchievement(to, achievementId);
@@ -171,6 +159,7 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
         hasClaimed[to][achievementId] = true;
         tokenId = nextTokenId++;
         tokenAchievementId[tokenId] = achievementId;
+        tokenBoostBps[tokenId] = achievements[achievementId].stakingBoostBps;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, _achievementURI[achievementId]);
         emit AchievementClaimed(to, achievementId, tokenId);
@@ -194,7 +183,7 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
         emit Unlisted(tokenId);
     }
 
-    function buyNFT(uint256 tokenId) external payable {
+    function buyNFT(uint256 tokenId) external payable nonReentrant {
         Listing storage L = listings[tokenId];
         require(L.active, "not listed");
         require(msg.value >= L.priceWei, "price");
@@ -213,15 +202,15 @@ contract AchievementNFT is ERC721URIStorage, AccessControl {
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
         from = super._update(to, tokenId, auth);
-        uint256 aid = tokenAchievementId[tokenId];
-        uint256 boost = aid == 0 ? 0 : achievements[aid].stakingBoostBps;
+        // Use mint-time snapshot so later admin boost edits cannot underflow or inflate accounting.
+        uint256 boost = tokenBoostBps[tokenId];
 
-        if (from != address(0) && boost > 0) {
-            accountBoostBps[from] -= boost;
+        if (from != address(0)) {
+            if (boost > 0) accountBoostBps[from] -= boost;
             if (ownedAchievementCount[from] > 0) ownedAchievementCount[from] -= 1;
         }
-        if (to != address(0) && boost > 0) {
-            accountBoostBps[to] += boost;
+        if (to != address(0)) {
+            if (boost > 0) accountBoostBps[to] += boost;
             ownedAchievementCount[to] += 1;
         }
         if (listings[tokenId].active && from != address(0)) {

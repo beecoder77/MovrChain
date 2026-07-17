@@ -61,6 +61,9 @@ contract ClubTreasury is ReentrancyGuard {
     mapping(address => uint256) public votesCast;
     mapping(address => uint256) public proposalsPassed;
 
+    /// @notice MOVR reserved by Active proposals — prevents oversubscription griefing.
+    uint256 public totalReserved;
+
     event Donation(address indexed donor, uint256 amount);
     event Proposed(uint256 indexed proposalId, address indexed proposer, uint256 amount, string title);
     event Voted(uint256 indexed proposalId, address indexed voter, bool support, uint256 weight);
@@ -71,10 +74,7 @@ contract ClubTreasury is ReentrancyGuard {
     event ChallengesSet(address indexed challenges);
 
     constructor(address movr_, address registry_, address memberNft_, uint256 clubId_) {
-        require(
-            movr_ != address(0) && registry_ != address(0) && memberNft_ != address(0) && clubId_ > 0,
-            "zero"
-        );
+        require(movr_ != address(0) && registry_ != address(0) && memberNft_ != address(0) && clubId_ > 0, "zero");
         movr = IERC20(movr_);
         registry = IClubRegistryView(registry_);
         memberNft = ClubMemberNFT(memberNft_);
@@ -102,12 +102,18 @@ contract ClubTreasury is ReentrancyGuard {
     /// @notice Escrow MOVR from treasury into the challenges contract.
     function lockChallengeFunds(uint256 amount) external {
         require(msg.sender == challenges, "auth");
-        require(amount > 0 && amount <= balance(), "amount");
+        require(amount > 0 && amount <= available(), "amount");
         movr.safeTransfer(challenges, amount);
     }
 
     function balance() public view returns (uint256) {
         return movr.balanceOf(address(this));
+    }
+
+    /// @notice Spendable balance after Active proposal reservations.
+    function available() public view returns (uint256) {
+        uint256 bal = balance();
+        return bal > totalReserved ? bal - totalReserved : 0;
     }
 
     function proposalCount() external view returns (uint256) {
@@ -130,17 +136,7 @@ contract ClubTreasury is ReentrancyGuard {
         )
     {
         Proposal storage p = _proposals[proposalId];
-        return (
-            p.proposer,
-            p.title,
-            p.reason,
-            p.amount,
-            p.yesWeight,
-            p.noWeight,
-            p.state,
-            p.createdAt,
-            p.voteCount
-        );
+        return (p.proposer, p.title, p.reason, p.amount, p.yesWeight, p.noWeight, p.state, p.createdAt, p.voteCount);
     }
 
     function topDonors() external view returns (address[3] memory) {
@@ -161,6 +157,7 @@ contract ClubTreasury is ReentrancyGuard {
         Proposal storage p = _proposals[proposalId];
         if (p.state != ProposalState.Active) return false;
         if (p.yesWeight <= p.noWeight) return false;
+        // Reservation already holds `p.amount`; only need raw balance coverage.
         if (p.amount > balance()) return false;
         return votingClosed(proposalId);
     }
@@ -200,13 +197,14 @@ contract ClubTreasury is ReentrancyGuard {
         returns (uint256 proposalId)
     {
         require(registry.isMember(clubId, msg.sender), "member");
-        require(amount > 0 && amount <= balance(), "amount");
+        require(amount > 0 && amount <= available(), "amount");
         bytes memory t = bytes(title);
         bytes memory r = bytes(reason);
         require(t.length > 0 && t.length <= MAX_TITLE, "title");
         require(r.length <= MAX_REASON, "reason");
 
         proposalId = _proposals.length;
+        totalReserved += amount;
         _proposals.push(
             Proposal({
                 proposer: msg.sender,
@@ -228,6 +226,7 @@ contract ClubTreasury is ReentrancyGuard {
         require(proposalId < _proposals.length, "id");
         Proposal storage p = _proposals[proposalId];
         require(p.state == ProposalState.Active, "state");
+        require(!votingClosed(proposalId), "closed");
         require(!hasVoted[proposalId][msg.sender], "voted");
 
         uint256 weight = votingPower(msg.sender);
@@ -252,6 +251,7 @@ contract ClubTreasury is ReentrancyGuard {
         require(p.amount <= balance(), "funds");
 
         p.state = ProposalState.Executed;
+        totalReserved -= p.amount;
         proposalsPassed[p.proposer] += 1;
         registry.creditProposalPassed(p.proposer);
         // Send to proposer as club spend contact (hackathon MVP — refreshments/jersey lead)
@@ -265,6 +265,7 @@ contract ClubTreasury is ReentrancyGuard {
         require(p.state == ProposalState.Active, "state");
         require(msg.sender == p.proposer, "proposer");
         p.state = ProposalState.Cancelled;
+        totalReserved -= p.amount;
         emit Cancelled(proposalId);
     }
 

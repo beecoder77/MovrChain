@@ -29,6 +29,7 @@ contract DeployClubs is Script {
 
         MovrStaking staking = new MovrStaking(deployer, movr, achievementNft);
         staking.setClubRegistry(address(registry));
+        staking.setClubBadges(address(badges));
         registry.setStaking(address(staking));
 
         vm.stopBroadcast();

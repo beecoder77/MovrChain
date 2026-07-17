@@ -39,9 +39,7 @@ contract MovrClubRegistry {
     mapping(address => uint256) public proposalsPassedCount;
     mapping(address => uint256) public votesCastCount;
 
-    event ClubCreated(
-        uint256 indexed clubId, address indexed creator, address treasury, string name
-    );
+    event ClubCreated(uint256 indexed clubId, address indexed creator, address treasury, string name);
     event MemberAdded(uint256 indexed clubId, address indexed account);
     event MemberLeft(uint256 indexed clubId, address indexed account);
     event StakingSet(address indexed staking);
@@ -111,10 +109,7 @@ contract MovrClubRegistry {
         return account == c.creator || clubAdmins[clubId][account];
     }
 
-    function createClub(string calldata name, bool isPublic_)
-        external
-        returns (uint256 clubId, address treasury)
-    {
+    function createClub(string calldata name, bool isPublic_) external returns (uint256 clubId, address treasury) {
         require(clubOf[msg.sender] == 0, "already in club");
         bytes memory n = bytes(name);
         require(n.length > 0 && n.length <= MAX_NAME, "name");
@@ -242,9 +237,7 @@ contract MovrClubRegistry {
         )
     {
         Club storage c = _clubs[clubId];
-        return (
-            c.name, c.creator, c.treasury, c.createdAt, c.exists, _members[clubId].length, c.isPublic
-        );
+        return (c.name, c.creator, c.treasury, c.createdAt, c.exists, _members[clubId].length, c.isPublic);
     }
 
     function pendingApplicants(uint256 clubId) external view returns (address[] memory) {
@@ -308,6 +301,10 @@ contract MovrClubRegistry {
                 list.pop();
                 break;
             }
+        }
+        // Burn soulbound membership NFT so the wallet can rejoin / remint later.
+        if (memberNft.holdsMemberNFT(account, clubId)) {
+            memberNft.burnMember(account, clubId);
         }
     }
 

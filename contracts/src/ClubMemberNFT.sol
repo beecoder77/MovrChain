@@ -14,6 +14,7 @@ contract ClubMemberNFT is ERC721, AccessControl {
     mapping(address => mapping(uint256 => uint256)) public memberToken; // account => clubId => tokenId
 
     event MemberMinted(address indexed account, uint256 indexed clubId, uint256 indexed tokenId);
+    event MemberBurned(address indexed account, uint256 indexed clubId, uint256 indexed tokenId);
 
     constructor(address admin_) ERC721("MovrChain Club Member", "MCLUB") {
         require(admin_ != address(0), "zero");
@@ -21,20 +22,11 @@ contract ClubMemberNFT is ERC721, AccessControl {
         _grantRole(MINTER_ROLE, admin_);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, AccessControl)
-        returns (bool)
-    {
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 
-    function mintMember(address to, uint256 clubId)
-        external
-        onlyRole(MINTER_ROLE)
-        returns (uint256 tokenId)
-    {
+    function mintMember(address to, uint256 clubId) external onlyRole(MINTER_ROLE) returns (uint256 tokenId) {
         require(to != address(0) && clubId > 0, "bad");
         require(memberToken[to][clubId] == 0, "already");
         tokenId = nextTokenId++;
@@ -47,6 +39,16 @@ contract ClubMemberNFT is ERC721, AccessControl {
     function holdsMemberNFT(address account, uint256 clubId) external view returns (bool) {
         uint256 tid = memberToken[account][clubId];
         return tid != 0 && _ownerOf(tid) == account;
+    }
+
+    /// @notice Burn membership NFT when leaving a club so the wallet can rejoin later.
+    function burnMember(address account, uint256 clubId) external onlyRole(MINTER_ROLE) {
+        uint256 tid = memberToken[account][clubId];
+        require(tid != 0 && _ownerOf(tid) == account, "none");
+        delete memberToken[account][clubId];
+        delete tokenClubId[tid];
+        _burn(tid);
+        emit MemberBurned(account, clubId, tid);
     }
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {

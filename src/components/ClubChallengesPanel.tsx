@@ -3,6 +3,7 @@ import { monadTestnet } from "viem/chains";
 import type { PublicClient } from "viem";
 import {
   APPROVE_CHALLENGE_GAS,
+  CANCEL_CHALLENGE_GAS,
   challengesLive,
   CLUB_CHALLENGES,
   CLUB_CHALLENGES_ABI,
@@ -106,7 +107,9 @@ export function ClubChallengesPanel({
   const handleCreate = () => {
     const dur = Number(duration);
     const rewardWei = parseMovrInput(reward);
-    if (!rule.trim() || !Number.isFinite(dur) || dur <= 0) return;
+    const unitNum = Number(unit);
+    const maxDur = unitNum === DurationUnit.Months ? 3 : 90;
+    if (!rule.trim() || !Number.isFinite(dur) || dur <= 0 || dur > maxDur) return;
     if (!rewardWei || rewardWei === 0n) return;
     onWrite(() => {
       void (async () => {
@@ -117,7 +120,7 @@ export function ClubChallengesPanel({
               address: CLUB_CHALLENGES,
               abi: CLUB_CHALLENGES_ABI,
               functionName: "createChallenge",
-              args: [clubId, rule.trim(), Number(unit), dur, rewardWei],
+              args: [clubId, rule.trim(), unitNum, dur, rewardWei],
               account: address,
             });
             gas = bufferedClubGas(est, CREATE_CHALLENGE_GAS);
@@ -129,7 +132,7 @@ export function ClubChallengesPanel({
           address: CLUB_CHALLENGES,
           abi: CLUB_CHALLENGES_ABI,
           functionName: "createChallenge",
-          args: [clubId, rule.trim(), Number(unit), dur, rewardWei],
+          args: [clubId, rule.trim(), unitNum, dur, rewardWei],
           chainId: monadTestnet.id,
           gas,
         });
@@ -189,6 +192,19 @@ export function ClubChallengesPanel({
     );
   };
 
+  const handleCancelChallenge = (challengeId: bigint) => {
+    onWrite(() =>
+      writeContract({
+        address: CLUB_CHALLENGES,
+        abi: CLUB_CHALLENGES_ABI,
+        functionName: "cancelChallenge",
+        args: [challengeId],
+        chainId: monadTestnet.id,
+        gas: CANCEL_CHALLENGE_GAS,
+      }),
+    );
+  };
+
   if (!challengesLive()) {
     return (
       <section className="club-detail__panel" aria-labelledby="challenge-h">
@@ -209,11 +225,11 @@ export function ClubChallengesPanel({
         Challenges
       </h2>
       <p className="club-detail__hint">
-        Free-form rules, treasury reward, Captain/Admin approval, equal split
-        when the timer ends.
+        Free-form rules, treasury reward (Captain/Admin create), equal split
+        when the timer ends. Max duration 90 days.
       </p>
 
-      {isMember && !open && (
+      {isManager && !open && (
         <Button
           variant="secondary"
           block
@@ -224,7 +240,7 @@ export function ClubChallengesPanel({
         </Button>
       )}
 
-      {isMember && open && (
+      {isManager && open && (
         <div className="club-detail__propose-form">
           <input
             className="clubs-screen__input"
@@ -239,7 +255,7 @@ export function ClubChallengesPanel({
               className="clubs-screen__input club-challenge__duration-input"
               type="number"
               min={1}
-              max={365}
+              max={90}
               value={duration}
               disabled={busy}
               onChange={(e) => setDuration(e.target.value)}
@@ -254,7 +270,7 @@ export function ClubChallengesPanel({
             >
               <option value={String(DurationUnit.Hours)}>Hours</option>
               <option value={String(DurationUnit.Days)}>Days</option>
-              <option value={String(DurationUnit.Months)}>Months</option>
+              <option value={String(DurationUnit.Months)}>Months (max 3)</option>
             </select>
           </div>
           <input
@@ -342,6 +358,17 @@ export function ClubChallengesPanel({
                     );
                   })}
                 </ul>
+              )}
+
+              {isManager && active && (
+                <Button
+                  variant="ghost"
+                  block
+                  disabled={busy}
+                  onClick={() => handleCancelChallenge(c.id)}
+                >
+                  Cancel challenge — refund treasury
+                </Button>
               )}
 
               {c.state === 0 && ended && (

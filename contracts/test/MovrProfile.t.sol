@@ -17,14 +17,8 @@ contract MovrProfileTest is Test {
         vm.prank(runner);
         profile.setProfile("AlexRunner", "Alex", "Morning miles on Monad", 3);
 
-        (
-            string memory handle,
-            string memory name,
-            string memory bio,
-            uint8 avatarId,
-            uint64 updatedAt,
-            bool exists
-        ) = profile.getProfile(runner);
+        (string memory handle, string memory name, string memory bio, uint8 avatarId, uint64 updatedAt, bool exists) =
+            profile.getProfile(runner);
 
         assertTrue(exists);
         assertEq(handle, "alexrunner");
@@ -87,5 +81,41 @@ contract MovrProfileTest is Test {
         vm.expectRevert(bytes("handle"));
         profile.setProfile("bad-name", "Alex", "", 0);
         vm.stopPrank();
+    }
+
+    function testMaxNameAndBioLength() public {
+        bytes memory nameOk = new bytes(32);
+        bytes memory nameBad = new bytes(33);
+        bytes memory bioOk = new bytes(160);
+        bytes memory bioBad = new bytes(161);
+        for (uint256 i = 0; i < 33; i++) {
+            if (i < 32) nameOk[i] = 0x41;
+            nameBad[i] = 0x41;
+        }
+        for (uint256 i = 0; i < 161; i++) {
+            if (i < 160) bioOk[i] = 0x62;
+            bioBad[i] = 0x62;
+        }
+
+        vm.startPrank(runner);
+        profile.setProfile("maxlen", string(nameOk), string(bioOk), 0);
+
+        vm.expectRevert(bytes("name"));
+        profile.setProfile("maxlen", string(nameBad), "", 0);
+
+        vm.expectRevert(bytes("bio"));
+        profile.setProfile("maxlen", "Alex", string(bioBad), 0);
+        vm.stopPrank();
+    }
+
+    function testHandleHelpers() public {
+        vm.prank(runner);
+        profile.setProfile("stride", "Alex", "bio", 7);
+
+        assertEq(profile.handleOf(runner), "stride");
+        assertEq(profile.avatarOf(runner), 7);
+        assertTrue(profile.isHandleAvailable("freehandle"));
+        assertFalse(profile.isHandleAvailable("STRIDE"));
+        assertFalse(profile.isHandleAvailable("ab")); // invalid → false
     }
 }

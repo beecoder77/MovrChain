@@ -17,8 +17,7 @@ contract DeployClubChallenges is Script {
         address deployer = vm.addr(pk);
 
         // Preflight: old registries lack challenges() - staticcall fails with empty revert.
-        (bool hasChallengesGetter,) =
-            registryAddr.staticcall(abi.encodeWithSignature("challenges()"));
+        (bool hasChallengesGetter,) = registryAddr.staticcall(abi.encodeWithSignature("challenges()"));
         require(hasChallengesGetter, "registry outdated: run ./deploy-clubs.sh first");
 
         MovrClubRegistry registry = MovrClubRegistry(registryAddr);

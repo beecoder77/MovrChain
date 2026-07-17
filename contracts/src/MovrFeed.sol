@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {MovrChainAttestation} from "./MovrChainAttestation.sol";
 
 /// @title MovrFeed — community + per-wallet run timeline
-/// @notice Runner publishes after attestRun. Community is global; personal list is keyed by address.
-contract MovrFeed {
+/// @notice Runner publishes after attestRun. Owner can pause publishing (moderation).
+contract MovrFeed is Ownable, Pausable {
     uint256 public constant MAX_NAME_BYTES = 64;
 
     struct Post {
@@ -24,30 +26,28 @@ contract MovrFeed {
     mapping(address => uint256[]) private _runnerPostIds;
 
     event RunPublished(
-        uint256 indexed postId,
-        bytes32 indexed runHash,
-        address indexed runner,
-        uint256 distanceMeters,
-        string runName
+        uint256 indexed postId, bytes32 indexed runHash, address indexed runner, uint256 distanceMeters, string runName
     );
 
-    constructor(address attestation_) {
+    constructor(address owner_, address attestation_) Ownable(owner_) {
         require(attestation_ != address(0), "zero");
         attestation = MovrChainAttestation(attestation_);
     }
 
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     /// @notice Publish an attested run to community + your address feed
-    function publish(bytes32 runHash, string calldata runName) external returns (uint256 postId) {
+    function publish(bytes32 runHash, string calldata runName) external whenNotPaused returns (uint256 postId) {
         require(!published[runHash], "already published");
         require(bytes(runName).length > 0 && bytes(runName).length <= MAX_NAME_BYTES, "name");
 
-        (
-            address runner,
-            uint256 distanceMeters,
-            uint256 durationSeconds,
-            ,
-            ,
-        ) = attestation.attestations(runHash);
+        (address runner, uint256 distanceMeters, uint256 durationSeconds,,,) = attestation.attestations(runHash);
 
         require(runner == msg.sender, "not runner");
         require(distanceMeters > 0, "no attestation");
@@ -103,7 +103,6 @@ contract MovrFeed {
         return _runnerPostIds[account];
     }
 
-    /// @notice Newest-first community post ids, up to `limit`
     function latestPostIds(uint256 limit) external view returns (uint256[] memory ids) {
         uint256 n = _posts.length;
         if (limit > n) limit = n;
