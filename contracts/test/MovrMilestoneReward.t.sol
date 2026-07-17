@@ -22,7 +22,7 @@ contract MovrMilestoneRewardTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         movr = new MovrToken(owner);
-        attestation = new MovrChainAttestation();
+        attestation = new MovrChainAttestation(owner);
         rewards = new MovrMilestoneReward(owner, address(movr), address(attestation));
         memberNft = new ClubMemberNFT(owner);
         registry = new MovrClubRegistry(address(movr), address(memberNft));
@@ -36,9 +36,8 @@ contract MovrMilestoneRewardTest is Test {
     }
 
     function testClaimPaysOneMovrPerKm() public {
-        bytes32 hash = keccak256("run-1");
         vm.prank(runner);
-        attestation.attestRun(hash, 1500, 600); // 1.5 km → 1.5 MOVR
+        bytes32 hash = attestation.attestRun(keccak256("run-1"), 1500, 600); // 1.5 km
 
         uint256 before = movr.balanceOf(runner);
         vm.prank(runner);
@@ -49,9 +48,8 @@ contract MovrMilestoneRewardTest is Test {
     }
 
     function testExactKmPaysInteger() public {
-        bytes32 hash = keccak256("5k");
         vm.prank(runner);
-        attestation.attestRun(hash, 5000, 1800);
+        bytes32 hash = attestation.attestRun(keccak256("5k"), 5000, 1800);
 
         vm.prank(runner);
         uint256 paid = rewards.claim(hash);
@@ -59,16 +57,14 @@ contract MovrMilestoneRewardTest is Test {
     }
 
     function testCannotClaimTwiceOrWithoutMilestone() public {
-        bytes32 shortHash = keccak256("short");
         vm.prank(runner);
-        attestation.attestRun(shortHash, 500, 200);
+        bytes32 shortHash = attestation.attestRun(keccak256("short"), 500, 200);
         vm.prank(runner);
         vm.expectRevert(bytes("not claimable"));
         rewards.claim(shortHash);
 
-        bytes32 okHash = keccak256("ok");
         vm.prank(runner);
-        attestation.attestRun(okHash, 2000, 700);
+        bytes32 okHash = attestation.attestRun(keccak256("ok"), 2000, 700);
         vm.prank(runner);
         rewards.claim(okHash);
         vm.prank(runner);
@@ -81,9 +77,8 @@ contract MovrMilestoneRewardTest is Test {
         (uint256 clubId, address treasury) = registry.createClub("Pulse", true);
         assertEq(clubId, 1);
 
-        bytes32 hash = keccak256("club-run");
         vm.prank(runner);
-        attestation.attestRun(hash, 10_000, 3600); // 10 km → 10 MOVR runner + 1 MOVR club
+        bytes32 hash = attestation.attestRun(keccak256("club-run"), 10_000, 3600);
 
         uint256 runnerBefore = movr.balanceOf(runner);
         uint256 treasuryBefore = movr.balanceOf(treasury);
@@ -94,17 +89,16 @@ contract MovrMilestoneRewardTest is Test {
         assertEq(movr.balanceOf(runner), runnerBefore + 10 ether);
         assertEq(movr.balanceOf(treasury), treasuryBefore + 1 ether);
         assertEq(ClubTreasury(treasury).lifetimeDonated(runner), 1 ether);
-        assertEq(ClubTreasury(treasury).votingPower(runner), 3); // sole top donor → 3×
-        assertEq(rewards.previewClubReward(hash, runner), 0); // already claimed
+        assertEq(ClubTreasury(treasury).votingPower(runner), 3);
+        assertEq(rewards.previewClubReward(hash, runner), 0);
     }
 
     function testClubCutProportional() public {
         vm.prank(runner);
         (, address treasury) = registry.createClub("Split", true);
 
-        bytes32 hash = keccak256("5k-club");
         vm.prank(runner);
-        attestation.attestRun(hash, 5000, 1800); // 0.5 MOVR to club
+        bytes32 hash = attestation.attestRun(keccak256("5k-club"), 5000, 1800);
 
         vm.prank(runner);
         rewards.claim(hash);

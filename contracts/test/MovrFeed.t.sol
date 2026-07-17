@@ -13,14 +13,13 @@ contract MovrFeedTest is Test {
     address other = address(0xC0C);
 
     function setUp() public {
-        attestation = new MovrChainAttestation();
+        attestation = new MovrChainAttestation(address(this));
         feed = new MovrFeed(address(attestation));
     }
 
     function testPublishAddsCommunityAndPersonal() public {
-        bytes32 hash = keccak256("run-1");
         vm.prank(runner);
-        attestation.attestRun(hash, 2500, 800);
+        bytes32 hash = attestation.attestRun(keccak256("run-1"), 2500, 800);
 
         vm.prank(runner);
         uint256 id = feed.publish(hash, "Morning Loop");
@@ -52,9 +51,8 @@ contract MovrFeedTest is Test {
     }
 
     function testCannotPublishTwiceOrOthersRun() public {
-        bytes32 hash = keccak256("run-2");
         vm.prank(runner);
-        attestation.attestRun(hash, 1200, 400);
+        bytes32 hash = attestation.attestRun(keccak256("run-2"), 1200, 400);
 
         vm.prank(other);
         vm.expectRevert(bytes("not runner"));

@@ -20,4 +20,7 @@ monad_testnet = "https://testnet-rpc.monad.xyz"
 monad_mainnet = "https://rpc.monad.xyz"
 
 [etherscan]
-monad_testnet = { key = "verifycontract", url = "https://sourcify-api-monad.blockvision.org/" }
+# MonadScan testnet via Etherscan API v2.
+# IMPORTANT: do NOT put ?chainid= in the URL — forge appends ?module=... and that
+# would produce ?chainid=...?module= which Etherscan rejects.
+monad = { key = "${ETHERSCAN_API_KEY}", chain = 10143, url = "https://api.etherscan.io/v2/api" }

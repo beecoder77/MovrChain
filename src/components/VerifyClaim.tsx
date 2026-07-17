@@ -3,6 +3,7 @@ import { zeroAddress } from "viem";
 import type { ParsedRun } from "../lib/gpx";
 import { formatDistance } from "../lib/gpx";
 import {
+  computeRouteCommit,
   computeRunHash,
   CONTRACT_ADDRESS,
   clubRewardLabelForDistance,
@@ -62,13 +63,16 @@ function bufferedGas(estimate: bigint, floor: bigint): bigint {
 }
 
 export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
-  const runHash = computeRunHash(run);
+  const { address } = useAccount();
+  const routeCommit = computeRouteCommit(run);
+  const runHash = address
+    ? computeRunHash(address, run)
+    : (`0x${"00".repeat(32)}` as `0x${string}`);
   const runName = publishRunName(run.name);
   const milestone = meetsMilestone(run.totalDistanceMeters);
   const rewardLabel = rewardLabelForDistance(run.totalDistanceMeters);
   const clubRewardLabel = clubRewardLabelForDistance(run.totalDistanceMeters);
   const mapPoints = downsamplePoints(run.points, 200);
-  const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: monadTestnet.id });
   const clubsLive = CLUB_REGISTRY !== zeroAddress;
 
@@ -464,7 +468,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
             abi: MOVR_CHAIN_ABI,
             functionName: "attestRun",
             args: [
-              runHash,
+              routeCommit,
               BigInt(Math.round(run.totalDistanceMeters)),
               BigInt(run.durationSeconds),
             ],
@@ -480,7 +484,7 @@ export function VerifyClaim({ run, onBack, onVerified }: VerifyClaimProps) {
         abi: MOVR_CHAIN_ABI,
         functionName: "attestRun",
         args: [
-          runHash,
+          routeCommit,
           BigInt(Math.round(run.totalDistanceMeters)),
           BigInt(run.durationSeconds),
         ],

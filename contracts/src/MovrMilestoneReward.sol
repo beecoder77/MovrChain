@@ -97,7 +97,7 @@ contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
             ,
             ,
             ,
-            bool milestoneMet
+            bool milestoneMet,
         ) = attestation.attestations(runHash);
         return runner == account && milestoneMet;
     }
@@ -105,7 +105,7 @@ contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
     /// @notice Runner MOVR wei owed for a run (0 if not claimable by `account`)
     function previewReward(bytes32 runHash, address account) public view returns (uint256) {
         if (!claimable(runHash, account)) return 0;
-        (, uint256 distanceMeters, , , ) = attestation.attestations(runHash);
+        (, uint256 distanceMeters, , , , ) = attestation.attestations(runHash);
         return (distanceMeters * rewardPerKm) / METERS_PER_KM;
     }
 
@@ -114,14 +114,14 @@ contract MovrMilestoneReward is AccessControl, ReentrancyGuard {
         if (!claimable(runHash, account)) return 0;
         if (address(clubRegistry) == address(0)) return 0;
         if (clubRegistry.clubOf(account) == 0) return 0;
-        (, uint256 distanceMeters, , , ) = attestation.attestations(runHash);
+        (, uint256 distanceMeters, , , , ) = attestation.attestations(runHash);
         return (distanceMeters * clubRewardPer10Km) / METERS_PER_CLUB_REWARD;
     }
 
     /// @notice Claim runner MOVR; if in a club, also fund treasury (1 MOVR/10km) with donor credit
     function claim(bytes32 runHash) external nonReentrant returns (uint256 amount) {
         require(claimable(runHash, msg.sender), "not claimable");
-        (, uint256 distanceMeters, , , ) = attestation.attestations(runHash);
+        (, uint256 distanceMeters, , , , ) = attestation.attestations(runHash);
         amount = (distanceMeters * rewardPerKm) / METERS_PER_KM;
         require(amount > 0, "zero reward");
 

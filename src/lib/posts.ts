@@ -254,7 +254,7 @@ export function addVerifiedPost(
   run: ParsedRun,
   txHash?: string,
 ): { post: RunPost; saved: boolean } {
-  const runHash = computeRunHash(run);
+  const runHash = computeRunHash(address as `0x${string}`, run);
   const post: RunPost = {
     id: crypto.randomUUID(),
     address,

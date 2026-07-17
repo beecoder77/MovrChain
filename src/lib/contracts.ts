@@ -8,15 +8,15 @@ const env = (key: string): `0x${string}` | undefined => {
   return undefined;
 };
 
-/** MovrChainAttestation — verify / attest runs */
+/** MovrChainAttestation — verify / attest runs (hackathon submission address) */
 export const ATTESTATION_ADDRESS =
   env("VITE_CONTRACT_ADDRESS") ??
-  ("0xae2Cbd400FA8ef5be2F0c52cF21263A1D95C58cB" as const);
+  ("0x70FA6Fa42741f2890647e42a8cBE102FefD65c38" as const);
 
 /** MovrProfile — unique handle, name, bio, avatar (per connected wallet) */
 export const PROFILE_ADDRESS =
   env("VITE_PROFILE_ADDRESS") ??
-  ("0x9A2AE847Ad36B8A64aa82156331Bd8648A3De31A" as const);
+  ("0xa16938B26824c3D2aACEb4e25a08937B7fCb202c" as const);
 
 export const MOVR_TOKEN_ADDRESS =
   env("VITE_MOVR_TOKEN") ??
@@ -24,36 +24,36 @@ export const MOVR_TOKEN_ADDRESS =
 
 export const ACHIEVEMENT_NFT_ADDRESS =
   env("VITE_ACHIEVEMENT_NFT") ??
-  ("0xe17320E0440Bc1a2CC426772f1712fB5b1627466" as const);
+  ("0xf54b551c5DEc5E5da56cBB9364cC7F12Ce38043e" as const);
 
 export const STAKING_ADDRESS =
   env("VITE_STAKING") ??
-  ("0xbB10eBa7545E2f33212F11c0E426DBdF0814FF48" as const);
+  ("0x1b4b84aff414686AeFb8cBd921E1223461563413" as const);
 
 /** MovrClubRegistry — clubs ≤10 + treasury factory */
 export const CLUB_REGISTRY_ADDRESS =
   env("VITE_CLUB_REGISTRY") ??
-  ("0x884D26487362656D0d63078948684d0f56c53D10" as const);
+  ("0x2bBB9f4Dbe6F57bB7DD35de1A4376dE22a1F2404" as const);
 
 export const CLUB_MEMBER_NFT_ADDRESS =
   env("VITE_CLUB_MEMBER_NFT") ??
-  ("0x9a82e7bDa0e15c6144E1bb40012BC3dBFaC2A982" as const);
+  ("0xa848d29b8Ae84656BA71646817f9603Ec980cD95" as const);
 
 export const CLUB_BADGE_NFT_ADDRESS =
   env("VITE_CLUB_BADGE_NFT") ??
-  ("0xa5630CF7BafF26546e94f02893f148fDd852dd27" as const);
+  ("0x364FE1177db623978bC49c8eA9d96052D59b87ed" as const);
 
 /** MovrClubChallenges — on-chain club running challenges */
 export const CLUB_CHALLENGES_ADDRESS =
   env("VITE_CLUB_CHALLENGES") ??
-  ("0xD9E13E508eE6f4Fe996Cbf2F0EAD6D1443a74192" as const);
+  ("0x6851d99b887F725c4B307Fde7D51e5e0794c0414" as const);
 
 /** MovrMilestoneReward — 1 MOVR/km to runner; +1 MOVR/10km to club treasury if member */
 export const MILESTONE_REWARD_ADDRESS =
   env("VITE_MILESTONE_REWARD") ??
-  ("0x6ead9Ee219074C9CF746bE46676428e94F893e94" as const);
+  ("0xBB9F09B547d5aD640e523e780168a3C033d2Be62" as const);
 
 /** MovrFeed — community + per-wallet run timeline */
 export const FEED_ADDRESS =
   env("VITE_FEED_ADDRESS") ??
-  ("0x751213c015Cce92F5537FC0285738B7cBa9B2fc5" as const);
+  ("0x90572AB8a96534bB334D01078290ae341D4B06e6" as const);

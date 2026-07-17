@@ -19,7 +19,7 @@ contract MovrChainTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         movr = new MovrToken(owner);
-        attestation = new MovrChainAttestation();
+        attestation = new MovrChainAttestation(owner);
         nfts = new AchievementNFT(owner, address(attestation));
         staking = new MovrStaking(owner, address(movr), address(nfts));
 
@@ -41,8 +41,12 @@ contract MovrChainTest is Test {
 
     function testAttestAndClaim() public {
         vm.startPrank(runner);
-        bytes32 hash = keccak256("run-1");
-        attestation.attestRun(hash, 5200, 1800);
+        bytes32 route = keccak256("route-1");
+        bytes32 hash = attestation.attestRun(route, 5200, 1800);
+        assertEq(
+            hash,
+            attestation.computeRunHash(runner, 5200, 1800, route)
+        );
         assertTrue(nfts.eligible(runner, 1));
         uint256 tokenId = nfts.claimAchievement(1);
         assertEq(nfts.ownerOf(tokenId), runner);
@@ -60,7 +64,7 @@ contract MovrChainTest is Test {
 
     function testStakingBoostedByAchievement() public {
         vm.startPrank(runner);
-        attestation.attestRun(keccak256("run-2"), 1500, 600);
+        attestation.attestRun(keccak256("route-2"), 1500, 600);
         nfts.claimAchievement(1);
 
         movr.approve(address(staking), 100 ether);
@@ -71,5 +75,40 @@ contract MovrChainTest is Test {
         assertGt(pending, 0);
         staking.claim();
         vm.stopPrank();
+    }
+
+    function testRejectsUnrealisticPace() public {
+        vm.prank(runner);
+        vm.expectRevert(MovrChainAttestation.PaceUnrealistic.selector);
+        // 50 km in 10 seconds
+        attestation.attestRun(keccak256("fast"), 50_000, 10);
+    }
+
+    function testRejectsDistanceTooHigh() public {
+        vm.prank(runner);
+        vm.expectRevert(MovrChainAttestation.DistanceTooHigh.selector);
+        attestation.attestRun(keccak256("ultra"), 250_000, 50_000);
+    }
+
+    function testPauseBlocksAttest() public {
+        vm.prank(owner);
+        attestation.pause();
+        vm.prank(runner);
+        vm.expectRevert();
+        attestation.attestRun(keccak256("p"), 1500, 600);
+    }
+
+    function testHashBoundToCaller() public {
+        bytes32 route = keccak256("shared-route");
+        vm.prank(runner);
+        bytes32 a = attestation.attestRun(route, 2000, 800);
+        address other = address(0xC0C);
+        vm.prank(other);
+        bytes32 b = attestation.attestRun(route, 2000, 800);
+        assertTrue(a != b);
+        (address runnerA,,,,,) = attestation.attestations(a);
+        (address runnerB,,,,,) = attestation.attestations(b);
+        assertEq(runnerA, runner);
+        assertEq(runnerB, other);
     }
 }

@@ -2,13 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {MovrToken} from "../src/MovrToken.sol";
 import {MovrChainAttestation} from "../src/MovrChainAttestation.sol";
 import {AchievementNFT} from "../src/AchievementNFT.sol";
-import {MovrStaking} from "../src/MovrStaking.sol";
 
-/// @notice Deploys MovrChain stack on Monad and seeds default achievements.
-contract DeployMovrChain is Script {
+/// @notice Redeploy the hardened MovrChainAttestation + a fresh AchievementNFT wired to it.
+/// Keeps the existing MOVR token / profile. Seeds the default achievement catalog.
+/// Env: PRIVATE_KEY, optional ADMIN_ADDRESS
+contract DeployAttestation is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
@@ -19,34 +19,21 @@ contract DeployMovrChain is Script {
 
         vm.startBroadcast(pk);
 
-        MovrToken movr = new MovrToken(deployer);
         MovrChainAttestation attestation = new MovrChainAttestation(deployer);
         AchievementNFT nfts = new AchievementNFT(deployer, address(attestation));
-        MovrStaking staking = new MovrStaking(deployer, address(movr), address(nfts));
 
-        // Seed reward pool: 1_000_000 MOVR
-        uint256 rewardPool = 1_000_000 ether;
-        movr.mint(deployer, rewardPool);
-        movr.approve(address(staking), rewardPool);
-        staking.fundRewards(rewardPool);
-
-        // Optional extra admin
         if (admin != deployer) {
-            movr.setAdmin(admin, true);
             nfts.setAdmin(admin, true);
-            staking.setAdmin(admin, true);
         }
 
         _seedAchievements(nfts);
 
         vm.stopBroadcast();
 
-        console2.log("=== Deployed addresses ===");
-        console2.log("MOVR_TOKEN=", address(movr));
+        console2.log("=== Deployed ===");
         console2.log("ATTESTATION=", address(attestation));
         console2.log("ACHIEVEMENT_NFT=", address(nfts));
-        console2.log("STAKING=", address(staking));
-        console2.log("Set VITE_CONTRACT_ADDRESS to ATTESTATION for the existing frontend verify flow.");
+        console2.log("Set VITE_CONTRACT_ADDRESS to ATTESTATION for the frontend verify flow.");
     }
 
     function _uri(string memory slug) internal view returns (string memory uri) {

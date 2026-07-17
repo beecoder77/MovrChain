@@ -54,12 +54,33 @@ function mapKnownFailure(combined: string): string | null {
   if (combined.includes("connector not found") || combined.includes("no provider")) {
     return "No wallet detected. Install MetaMask or another Web3 wallet.";
   }
-  // Exact revert from MovrChainAttestation.attestRun
-  if (combined.includes("already attested")) {
+  // Exact revert / custom errors from MovrChainAttestation.attestRun
+  if (
+    combined.includes("already attested") ||
+    combined.includes("alreadyattested")
+  ) {
     return "This run was already verified on Monad. You can post it to your feed without verifying again.";
   }
-  if (combined.includes("invalid distance") || combined.includes("invalid duration")) {
+  if (
+    combined.includes("invalid distance") ||
+    combined.includes("invalid duration") ||
+    combined.includes("invaliddistance") ||
+    combined.includes("invalidduration")
+  ) {
     return "This GPX looks invalid for attestation. Re-export and try again.";
+  }
+  if (
+    combined.includes("paceunrealistic") ||
+    combined.includes("distancetoohigh") ||
+    combined.includes("durationtoohigh")
+  ) {
+    return "This run looks unrealistic (distance, duration, or pace). Check the GPX and try again.";
+  }
+  if (combined.includes("dailylimit")) {
+    return "Daily attestation limit reached (24/day). Try again tomorrow.";
+  }
+  if (combined.includes("enforcedpause") || combined.includes("paused")) {
+    return "Attestations are temporarily paused. Please try again later.";
   }
   if (combined.includes("out of gas") || combined.includes("intrinsic gas too low")) {
     return "Transaction ran out of gas on Monad. Retry — the gas limit was too low for this write (unused gas is refunded, so a higher limit does not raise the fee by itself).";
@@ -94,7 +115,8 @@ export function formatWalletError(error: Error | null | undefined): string | nul
 }
 
 export function isAlreadyAttestedError(error: unknown): boolean {
-  return errorText(error).includes("already attested");
+  const t = errorText(error);
+  return t.includes("already attested") || t.includes("alreadyattested");
 }
 
 /** Friendly copy when an attestation tx fails (reject, revert, wait error). */

@@ -41,8 +41,8 @@ export function clubRewardWeiForDistance(distanceMeters: number): bigint {
 export const REWARD_LABEL = `+${REWARD_PER_KM} ${REWARD_TOKEN}/km`;
 export const CLUB_REWARD_LABEL = `+${CLUB_REWARD_PER_10KM} ${REWARD_TOKEN}/10km to club`;
 
-export function computeRunHash(run: ParsedRun): `0x${string}` {
-  const routeHash = keccak256(
+export function computeRouteCommit(run: ParsedRun): `0x${string}` {
+  return keccak256(
     new TextEncoder().encode(
       run.points
         .filter((_, i) => i % Math.max(1, Math.floor(run.points.length / 50)) === 0)
@@ -50,14 +50,24 @@ export function computeRunHash(run: ParsedRun): `0x${string}` {
         .join("|"),
     ),
   );
+}
 
+/** Must match on-chain `MovrChainAttestation.computeRunHash`. */
+export function computeRunHash(
+  runner: `0x${string}`,
+  run: ParsedRun,
+): `0x${string}` {
+  const routeCommit = computeRouteCommit(run);
   return keccak256(
-    encodeAbiParameters(parseAbiParameters("bytes32, uint256, uint256, string"), [
-      routeHash,
-      BigInt(Math.round(run.totalDistanceMeters)),
-      BigInt(run.durationSeconds),
-      run.name,
-    ]),
+    encodeAbiParameters(
+      parseAbiParameters("address, uint256, uint256, bytes32"),
+      [
+        runner,
+        BigInt(Math.round(run.totalDistanceMeters)),
+        BigInt(run.durationSeconds),
+        routeCommit,
+      ],
+    ),
   );
 }
 
@@ -70,12 +80,31 @@ export const MOVR_CHAIN_ABI = [
     type: "function",
     name: "attestRun",
     inputs: [
-      { name: "runHash", type: "bytes32" },
+      { name: "routeCommit", type: "bytes32" },
       { name: "distanceMeters", type: "uint256" },
       { name: "durationSeconds", type: "uint256" },
     ],
-    outputs: [],
+    outputs: [{ name: "runHash", type: "bytes32" }],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "computeRunHash",
+    inputs: [
+      { name: "runner", type: "address" },
+      { name: "distanceMeters", type: "uint256" },
+      { name: "durationSeconds", type: "uint256" },
+      { name: "routeCommit", type: "bytes32" },
+    ],
+    outputs: [{ name: "", type: "bytes32" }],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "isAttested",
+    inputs: [{ name: "runHash", type: "bytes32" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -87,6 +116,7 @@ export const MOVR_CHAIN_ABI = [
       { name: "durationSeconds", type: "uint256" },
       { name: "timestamp", type: "uint256" },
       { name: "milestoneMet", type: "bool" },
+      { name: "routeCommit", type: "bytes32" },
     ],
     stateMutability: "view",
   },
@@ -119,6 +149,8 @@ export const MOVR_CHAIN_ABI = [
       { name: "runner", type: "address", indexed: true },
       { name: "distanceMeters", type: "uint256", indexed: false },
       { name: "milestoneMet", type: "bool", indexed: false },
+      { name: "currentStreakDays", type: "uint256", indexed: false },
+      { name: "routeCommit", type: "bytes32", indexed: false },
     ],
   },
 ] as const;

@@ -46,6 +46,7 @@ contract MovrFeed {
             uint256 distanceMeters,
             uint256 durationSeconds,
             ,
+            ,
         ) = attestation.attestations(runHash);
 
         require(runner == msg.sender, "not runner");
