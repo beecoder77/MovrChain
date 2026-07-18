@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Top up MovrChain reward pools to at least TARGET_MOVR each (default 1_000_000).
 # - Milestone: ERC20 transfer into MovrMilestoneReward (claim uses balanceOf)
-# - Staking: Multisig → Timelock schedule approve + fundRewards (needs DEFAULT_ADMIN = Timelock)
+# - Staking (default): Multisig → Timelock schedule approve + fundRewards
 #            After TIMELOCK delay, run: ./fund-all-pools.sh execute
+# - Staking (fast, no Timelock): ./fund-staking-direct.sh
+#            New proxy with deployer DEFAULT_ADMIN + immediate fundRewards
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -28,8 +30,11 @@ if [[ "$PRIVATE_KEY" != 0x* && "$PRIVATE_KEY" != 0X* ]]; then
 fi
 
 RPC="${RPC_URL:-https://testnet-rpc.monad.xyz}"
-# 1_000_000 MOVR
-TARGET="${TARGET_MOVR:-1000000000000000000000000}"
+# 1_000_000 MOVR — ignore empty TARGET_MOVR from env
+TARGET="1000000000000000000000000"
+if [[ -n "${TARGET_MOVR:-}" ]]; then
+  TARGET="$TARGET_MOVR"
+fi
 SALT="${SALT:-0x00000000000000000000000000000000000000000000000000000000000000f1}"
 CMD="${1:-fund}"
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Fund MovrMilestoneReward claim pool (MOVR balance on the contract).
-# Direct ERC20 transfer is enough — claim() only checks balanceOf(this).
-# Prefer ./fund-all-pools.sh to top both milestone + schedule staking.
+# Fast top-up MovrMilestoneReward to at least TARGET MOVR (default 1_000_000).
+# Uses ERC20 transfer (claim checks balanceOf). Mints if owner balance is short.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -24,30 +23,41 @@ if [[ "$PRIVATE_KEY" != 0x* && "$PRIVATE_KEY" != 0X* ]]; then
 fi
 
 RPC="${RPC_URL:-https://testnet-rpc.monad.xyz}"
-# Default 1,000,000 MOVR
-amount="${MILESTONE_POOL:-1000000000000000000000000}"
+# 1_000_000 MOVR — ignore empty MILESTONE_POOL from .env
+TARGET="1000000000000000000000000"
+if [[ -n "${MILESTONE_POOL:-}" ]]; then
+  TARGET="$MILESTONE_POOL"
+fi
+
+wei() { awk '{print $1}'; }
 
 OWNER=$(cast wallet address --private-key "$PRIVATE_KEY")
-BAL=$(cast call "$MOVR_TOKEN" "balanceOf(address)(uint256)" "$OWNER" --rpc-url "$RPC" | awk '{print $1}')
-POOL=$(cast call "$MOVR_TOKEN" "balanceOf(address)(uint256)" "$MILESTONE_REWARD" --rpc-url "$RPC" | awk '{print $1}')
+BAL=$(cast call "$MOVR_TOKEN" "balanceOf(address)(uint256)" "$OWNER" --rpc-url "$RPC" | wei)
+POOL=$(cast call "$MOVR_TOKEN" "balanceOf(address)(uint256)" "$MILESTONE_REWARD" --rpc-url "$RPC" | wei)
+ADD=$(python3 -c "print(max(0, int('$TARGET') - int('$POOL')))")
 
 echo "Owner:     $OWNER"
 echo "Milestone: $MILESTONE_REWARD"
 echo "Owner MOVR: $BAL"
 echo "Pool now:   $POOL"
-echo "Add amount: $amount"
+echo "Target:     $TARGET"
+echo "Will add:   $ADD"
 
-python3 - <<PY
-import sys
-bal, amt = int("$BAL"), int("$amount")
-if bal < amt:
-    need = amt - bal
-    print(f"Need mint of {need} — run: ./mint-movr.sh or ./fund-all-pools.sh", file=sys.stderr)
-    sys.exit(1)
-PY
+if [[ "$ADD" == "0" ]]; then
+  echo "Already ≥ target. Nothing to do."
+  exit 0
+fi
 
-cast send "$MOVR_TOKEN" "transfer(address,uint256)" "$MILESTONE_REWARD" "$amount" \
+if python3 -c "import sys; sys.exit(0 if int('$BAL') < int('$ADD') else 1)"; then
+  NEED=$(python3 -c "print(int('$ADD') - int('$BAL'))")
+  echo "Minting $NEED MOVR…"
+  cast send "$MOVR_TOKEN" "mint(address,uint256)" "$OWNER" "$NEED" \
+    --rpc-url "$RPC" --private-key "$PRIVATE_KEY" --legacy --gas-limit 200000
+fi
+
+echo "Transferring $ADD MOVR → milestone…"
+cast send "$MOVR_TOKEN" "transfer(address,uint256)" "$MILESTONE_REWARD" "$ADD" \
   --rpc-url "$RPC" --private-key "$PRIVATE_KEY" --legacy --gas-limit 100000
 
-POOL_AFTER=$(cast call "$MOVR_TOKEN" "balanceOf(address)(uint256)" "$MILESTONE_REWARD" --rpc-url "$RPC" | awk '{print $1}')
-echo "Done. Milestone pool MOVR balance: $POOL_AFTER"
+POOL_AFTER=$(cast call "$MOVR_TOKEN" "balanceOf(address)(uint256)" "$MILESTONE_REWARD" --rpc-url "$RPC" | wei)
+echo "Done. Milestone pool: $POOL_AFTER"

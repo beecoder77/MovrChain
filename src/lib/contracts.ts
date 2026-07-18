@@ -29,7 +29,7 @@ export const ACHIEVEMENT_NFT_ADDRESS =
 
 export const STAKING_ADDRESS =
   env("VITE_STAKING") ??
-  ("0x762Ae6f37BC52CB0Ce81A6d4ad6c3b3B3658479d" as const);
+  ("0x9d6ae82fB08CE0a53554269d558a3C75d33B199C" as const);
 
 /** MovrClubRegistry — clubs ≤10 + treasury factory */
 export const CLUB_REGISTRY_ADDRESS =
