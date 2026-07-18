@@ -22,19 +22,25 @@ contract MovrMultisigTest is Test {
     CallTarget target;
 
     function setUp() public {
-        multisig = new MovrMultisig(s1, s2, s3);
+        multisig = new MovrMultisig(s1, s2, s3, 2);
         target = new CallTarget();
     }
 
     function testRejectsInvalidConstructorSigners() public {
         vm.expectRevert(MovrMultisig.InvalidSigner.selector);
-        new MovrMultisig(s1, s1, s3);
+        new MovrMultisig(s1, s1, s3, 2);
 
         vm.expectRevert(MovrMultisig.InvalidSigner.selector);
-        new MovrMultisig(address(0), s2, s3);
+        new MovrMultisig(address(0), s2, s3, 2);
+
+        vm.expectRevert(MovrMultisig.InvalidThreshold.selector);
+        new MovrMultisig(s1, s2, s3, 0);
+
+        vm.expectRevert(MovrMultisig.InvalidThreshold.selector);
+        new MovrMultisig(s1, s2, s3, 4);
     }
 
-    function testOneOfThreeCannotExecute() public {
+    function testOneOfThreeCannotExecuteWhenThresholdTwo() public {
         bytes memory data = abi.encodeCall(CallTarget.setValue, (42));
         vm.prank(s1);
         uint256 txId = multisig.submitTransaction(address(target), 0, data);
@@ -56,6 +62,16 @@ contract MovrMultisigTest is Test {
         multisig.executeTransaction(txId);
 
         assertEq(target.value(), 7);
+    }
+
+    function testCreatorOnlyThresholdOneCanExecuteAlone() public {
+        MovrMultisig solo = new MovrMultisig(s1, s2, s3, 1);
+        bytes memory data = abi.encodeCall(CallTarget.setValue, (99));
+        vm.prank(s1);
+        uint256 txId = solo.submitTransaction(address(target), 0, data);
+        vm.prank(s1);
+        solo.executeTransaction(txId);
+        assertEq(target.value(), 99);
     }
 
     function testNonSignerCannotSubmit() public {

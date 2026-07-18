@@ -1,7 +1,7 @@
 # MovrChain Security Audit Reconciliation
 
 **Status: all High / Medium / Low findings from original + Jul 18 reaudits are FIXED** (Info residuals documented).  
-Foundry: `forge test --offline` → **91 passed** (Jul 18 2026 reaudit #2).
+Foundry: `forge test --offline` → **92 passed** (Jul 18 2026 — execute manager gate).
 
 ---
 
@@ -36,6 +36,7 @@ Foundry: `forge test --offline` → **91 passed** (Jul 18 2026 reaudit #2).
 | Irreversible challenge approve | `revokeApproval` |
 | Zero-boost owned-count skip | always adjust `ownedAchievementCount` |
 | Redeploy orphans production state | **UUPS + Beacon** with Timelock + 2-of-3 Multisig |
+| Any member could `execute` passed proposal | **FIXED** — `isClubManager` (Captain/Admin) only |
 
 ---
 
@@ -159,8 +160,8 @@ Foundry: `forge test --offline` → **91 passed** (Jul 18 2026 reaudit #2).
 | Action | Tool |
 |--------|------|
 | First upgradeable deploy | `./redeploy-all.sh` → `DeployUpgradeableStack.s.sol` |
-| Logic change (no new address) | Multisig confirm → Timelock schedule → wait delay → execute (`UpgradeViaTimelock.s.sol`) |
-| Club treasury logic change | Beacon `upgradeTo` via same Timelock path (`MODE=beacon`) |
+| Logic change (no new address) | `./upgrade.sh upgrade <name\|all>` → Multisig confirm → wait delay → `./upgrade.sh execute <name>` |
+| Club treasury logic change | `./upgrade.sh upgrade treasury` (`MODE=beacon`) |
 
 Post-deploy wiring (handled by `DeployUpgradeableStack` via `PrivilegeHandoff`):
 1. `attestation.setClubRegistry(registry)`

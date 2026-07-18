@@ -217,7 +217,7 @@ cd contracts
 forge test --offline
 ```
 
-Current hardening baseline: **91 tests, 0 failures** across token, attestation, feed, profile, achievements, staking, rewards, clubs, treasury, membership, badges, challenges, UUPS / Beacon / Multisig / Timelock upgrades, and privilege handoff.
+Current hardening baseline: **92 tests, 0 failures** across token, attestation, feed, profile, achievements, staking, rewards, clubs, treasury, membership, badges, challenges, UUPS / Beacon / Multisig / Timelock upgrades, and privilege handoff.
 
 Required pre-deploy checklist:
 
@@ -238,22 +238,25 @@ Required pre-deploy checklist:
 
 All addresses below are deployed on chain ID `10143`, have non-empty bytecode, pass representative ABI read calls, and have source code verified on MonadScan. The frontend defaults in `[src/lib/contracts.ts](src/lib/contracts.ts)` and local overrides in `.env.local` must remain synchronized with this registry.
 
-> **Jul 2026 security hardening is live on the addresses below** (immutable deploy). UUPS + Beacon + Multisig/Timelock is **merged on `main`** but not yet cut over on-chain. The next `./redeploy-all.sh` (after setting `MULTISIG_SIGNER_2` / `MULTISIG_SIGNER_3`) is the one-time cutover to stable proxy addresses — after that, logic upgrades must **not** change published addresses or require `contracts.ts` / README edits. See [contracts/TEST_MATRIX.md](contracts/TEST_MATRIX.md) for the Jul 18 reaudit disposition.
+> **Jul 18 2026 UUPS cutover is live** on the addresses below (Beacon + Multisig threshold=1 + Timelock 24h). Proxy addresses are **stable** — further logic changes use `./upgrade.sh` (Multisig → Timelock), not redeploy. Token + Profile were kept. See [contracts/TEST_MATRIX.md](contracts/TEST_MATRIX.md).
 
 
 | Contract             | Address                                      | Verified source                                                                                    |
 | -------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| MovrChainAttestation | `0x4FcC7b8d7334289d548183694C04d67aA366cC7E` | [MonadScan](https://testnet.monadscan.com/address/0x4FcC7b8d7334289d548183694C04d67aA366cC7E#code) |
+| MovrMultisig         | `0x61Fc8DcD97Fb5f46489Ab2fBaBf6429Ed5ADA52B` | [MonadScan](https://testnet.monadscan.com/address/0x61Fc8DcD97Fb5f46489Ab2fBaBf6429Ed5ADA52B#code) |
+| TimelockController   | `0xada899f2e96c31ca7e8De9e6f01e676a18fd67Ec` | [MonadScan](https://testnet.monadscan.com/address/0xada899f2e96c31ca7e8De9e6f01e676a18fd67Ec#code) |
+| Treasury Beacon      | `0x3efAf01Cd276ff8Db71F4fD04DB98ea02f88b59A` | [MonadScan](https://testnet.monadscan.com/address/0x3efAf01Cd276ff8Db71F4fD04DB98ea02f88b59A#code) |
+| MovrChainAttestation | `0x8F31Cbb38b539cB9e3242E262bf40058904d739c` | [MonadScan](https://testnet.monadscan.com/address/0x8F31Cbb38b539cB9e3242E262bf40058904d739c#code) |
 | MovrProfile          | `0x5079c9F03BafDaD54A4CBFdbf05662fdaC285832` | [MonadScan](https://testnet.monadscan.com/address/0x5079c9F03BafDaD54A4CBFdbf05662fdaC285832#code) |
 | MovrToken            | `0xD95C0f1F5F5F73e32F87B4f76d6a79809911B7BF` | [MonadScan](https://testnet.monadscan.com/address/0xD95C0f1F5F5F73e32F87B4f76d6a79809911B7BF#code) |
-| AchievementNFT       | `0x4b5eFbb1499423Ff1a315f699dAA9A059639077a` | [MonadScan](https://testnet.monadscan.com/address/0x4b5eFbb1499423Ff1a315f699dAA9A059639077a#code) |
-| MovrStaking          | `0xd88b01Ce8781712E593863Ca358EA44F5F0E0D4D` | [MonadScan](https://testnet.monadscan.com/address/0xd88b01Ce8781712E593863Ca358EA44F5F0E0D4D#code) |
-| MovrClubRegistry     | `0xe8438Ce97a5972812E4968F5b40D60d2A3aDA3A7` | [MonadScan](https://testnet.monadscan.com/address/0xe8438Ce97a5972812E4968F5b40D60d2A3aDA3A7#code) |
-| ClubMemberNFT        | `0x4FDE1cDA74FE56107CaCDC55b551bc6a45731474` | [MonadScan](https://testnet.monadscan.com/address/0x4FDE1cDA74FE56107CaCDC55b551bc6a45731474#code) |
-| ClubBadgeNFT         | `0xEB2Bb2BeBC2D5fA52E768B796e5aeC27E17D03B2` | [MonadScan](https://testnet.monadscan.com/address/0xEB2Bb2BeBC2D5fA52E768B796e5aeC27E17D03B2#code) |
-| MovrClubChallenges   | `0x7186Cd55038cB626C282055bCaEab721ae942108` | [MonadScan](https://testnet.monadscan.com/address/0x7186Cd55038cB626C282055bCaEab721ae942108#code) |
-| MovrMilestoneReward  | `0xb09746Ec8Ce13415fed0c11d282b1a7Acca777ed` | [MonadScan](https://testnet.monadscan.com/address/0xb09746Ec8Ce13415fed0c11d282b1a7Acca777ed#code) |
-| MovrFeed             | `0x41a767e92731168E4c596573Da411D78B4c78e19` | [MonadScan](https://testnet.monadscan.com/address/0x41a767e92731168E4c596573Da411D78B4c78e19#code) |
+| AchievementNFT       | `0x1c5E27280a2D993CE3E8E8a19009488f0F38EB5A` | [MonadScan](https://testnet.monadscan.com/address/0x1c5E27280a2D993CE3E8E8a19009488f0F38EB5A#code) |
+| MovrStaking          | `0x762Ae6f37BC52CB0Ce81A6d4ad6c3b3B3658479d` | [MonadScan](https://testnet.monadscan.com/address/0x762Ae6f37BC52CB0Ce81A6d4ad6c3b3B3658479d#code) |
+| MovrClubRegistry     | `0x91cb9D4A5e14E5Ac0962E2d6cba963003A4EC9D3` | [MonadScan](https://testnet.monadscan.com/address/0x91cb9D4A5e14E5Ac0962E2d6cba963003A4EC9D3#code) |
+| ClubMemberNFT        | `0x9a3d2332E53e512DcFA65078884f5213aAfe2A0a` | [MonadScan](https://testnet.monadscan.com/address/0x9a3d2332E53e512DcFA65078884f5213aAfe2A0a#code) |
+| ClubBadgeNFT         | `0xCC97214Be43c1A6E967caC448195FA3933C15764` | [MonadScan](https://testnet.monadscan.com/address/0xCC97214Be43c1A6E967caC448195FA3933C15764#code) |
+| MovrClubChallenges   | `0xB45d215FFb048D9477a9C4c6fA60b182B09538Ed` | [MonadScan](https://testnet.monadscan.com/address/0xB45d215FFb048D9477a9C4c6fA60b182B09538Ed#code) |
+| MovrMilestoneReward  | `0x7B013C35E7bA65e51486C3f9005b6e19809CD270` | [MonadScan](https://testnet.monadscan.com/address/0x7B013C35E7bA65e51486C3f9005b6e19809CD270#code) |
+| MovrFeed             | `0xf6073E5A71D05336b6c260FA14f7a86520D403Aa` | [MonadScan](https://testnet.monadscan.com/address/0xf6073E5A71D05336b6c260FA14f7a86520D403Aa#code) |
 
 
 > **Profile migration:** `0xa16938B26824c3D2aACEb4e25a08937B7fCb202c` is the retired pre-handle profile deployment. It does not implement `setProfile(string,string,string,uint8)` and must not be used by the frontend.
@@ -267,7 +270,7 @@ Production major updates must **not** redeploy new addresses (that orphans runs,
 | **ERC1967Proxy (UUPS)** | Stable address for Attestation, AchievementNFT, Staking, Registry, Member/Badge NFTs, Feed, MilestoneReward, Challenges |
 | **UpgradeableBeacon + BeaconProxy** | Shared ClubTreasury logic for every club |
 | **TimelockController** (default **24h**) | Sole upgrade owner / admin |
-| **MovrMultisig** (2-of-3) | Sole Timelock proposer / canceller / admin |
+| **MovrMultisig** (threshold 1–3, default **1** creator-only) | Sole Timelock proposer / canceller / admin |
 
 `MovrToken` and `MovrProfile` remain non-upgradeable.
 
@@ -275,17 +278,42 @@ Production major updates must **not** redeploy new addresses (that orphans runs,
 
 ```bash
 cd contracts
-# After deploying a new implementation:
+
+# See which proxies/beacon are configured
+./upgrade.sh list
+
+# ClubTreasury execute-manager fix (beacon — all clubs at once)
+./upgrade.sh upgrade treasury
+
+# Or any one UUPS proxy:
+./upgrade.sh upgrade challenges
+./upgrade.sh upgrade attestation
+
+# Or every configured target:
+./upgrade.sh upgrade all
+```
+
+Under the hood this deploys a new implementation, then runs `UpgradeViaTimelock.s.sol`.
+
+1. One Multisig signer runs `./upgrade.sh upgrade <name>` (submits `Timelock.schedule`). With `MULTISIG_THRESHOLD=1`, the same tx also executes the Multisig call.
+2. If threshold is 2+, a second signer confirms + executes the Multisig transaction.
+3. Wait `TIMELOCK_DELAY` (default 86400s).
+4. `./upgrade.sh execute <name>` (or `EXECUTE_AFTER_DELAY=1` / Explorer).
+
+Hackathon shortcut if the beacon/proxy is still owned by the deployer (before Timelock cutover):
+
+```bash
+./upgrade.sh direct treasury
+```
+
+Manual env form (same as the script):
+
+```bash
 TARGET=0xProxyOrBeacon NEW_IMPLEMENTATION=0xNewImpl MODE=uups \  # or MODE=beacon
 MOVR_MULTISIG=0x... TIMELOCK=0x... \
   forge script script/UpgradeViaTimelock.s.sol:UpgradeViaTimelock \
   --rpc-url https://testnet-rpc.monad.xyz --broadcast --legacy
 ```
-
-1. One Multisig signer runs the script (submits `Timelock.schedule`).
-2. A second signer confirms + executes the Multisig transaction.
-3. Wait `TIMELOCK_DELAY` (default 86400s).
-4. Anyone executes the Timelock operation (`EXECUTE_AFTER_DELAY=1` or Explorer).
 
 Storage layout is **append-only** (`__gap` reserved on each upgradeable contract). Never reorder or remove state variables in an upgrade.
 

@@ -223,7 +223,7 @@ export function ClubsScreen({ address, onOpenClub }: ClubsScreenProps) {
         <ChallengeNoticeBanner
           address={address}
           onOpenClubs={() => onOpenClub(club.clubId)}
-          ctaLabel="View challenges"
+          ctaLabel="Open club"
         />
       )}
 
@@ -723,12 +723,16 @@ export function ClubDetailScreen({
 
   useEffect(() => {
     if (error) setWarning(formatWalletError(error));
-    else if (receiptFailed || receipt?.status === "reverted")
+    else if (receiptFailed || receipt?.status === "reverted") {
       setWarning(
         formatWalletError(
-          receiptError ?? new Error("Club transaction reverted on Monad"),
+          receiptError ??
+            new Error(
+              "Club transaction reverted. For challenges: Captain/Admin only, and reward must fit unreserved treasury MOVR.",
+            ),
         ),
       );
+    }
   }, [error, receiptFailed, receiptError, receipt?.status]);
 
   const syncing = useAfterConfirmedTx(
@@ -967,6 +971,10 @@ export function ClubDetailScreen({
 
   const handleExecute = () => {
     if (latestId === undefined || !treasury) return;
+    if (!isManager) {
+      setWarning("Only the club Captain or Admins can execute a passed proposal.");
+      return;
+    }
     run(() => {
       void (async () => {
         let gas = EXECUTE_GAS;
@@ -1098,7 +1106,7 @@ export function ClubDetailScreen({
   const canVote = propState === 0 && !alreadyVoted && votingPower > 0;
   const passed = yesW > noW;
   const votingClosed = Boolean(votingClosedRaw);
-  const canExecuteSpend = Boolean(canExecuteRaw);
+  const canExecuteSpend = Boolean(canExecuteRaw) && isManager;
   const memberTotal = club.memberCount;
   const votesNeeded = Math.max(0, memberTotal - Number(voteCount));
   const closesAtMs = createdAt > 0 ? (createdAt + 24 * 60 * 60) * 1000 : 0;
@@ -1123,8 +1131,10 @@ export function ClubDetailScreen({
         votesNeeded > 0
           ? `Execute unlocks when all ${memberTotal} members vote (${votesNeeded} left), or in ~${hoursLeft}h.`
           : `Execute unlocks when voting closes (~${hoursLeft}h left).`;
-    } else if (!canExecuteSpend) {
+    } else if (!Boolean(canExecuteRaw)) {
       executeHint = "Voting closed, but this proposal did not pass.";
+    } else if (!isManager) {
+      executeHint = "Passed — waiting for the Captain or an Admin to execute.";
     }
   }
 
@@ -1460,13 +1470,21 @@ export function ClubDetailScreen({
       <ClubChallengesPanel
         clubId={clubId}
         address={address}
+        treasury={treasury}
         members={members}
         isMember={isMember}
         isManager={isManager}
         busy={busy}
+        txFailed={
+          Boolean(error) ||
+          receiptFailed ||
+          receipt?.status === "reverted"
+        }
+        parentWarning={warning}
         challenges={detailChallenges}
         onRefresh={refetchChallenges}
         onWrite={run}
+        onWarn={setWarning}
         writeContract={writeContract}
         publicClient={publicClient ?? undefined}
       />
@@ -1516,15 +1534,17 @@ export function ClubDetailScreen({
             >
               Vote no
             </Button>
-            <Button
-              variant="secondary"
-              block
-              loading={busy}
-              disabled={busy || !canExecuteSpend}
-              onClick={handleExecute}
-            >
-              Execute — pay {formatMovr(propAmount)} MOVR to {proposerLabel}
-            </Button>
+            {isManager && (
+              <Button
+                variant="secondary"
+                block
+                loading={busy}
+                disabled={busy || !canExecuteSpend}
+                onClick={handleExecute}
+              >
+                Execute — pay {formatMovr(propAmount)} MOVR to {proposerLabel}
+              </Button>
+            )}
           </div>
         </section>
       )}

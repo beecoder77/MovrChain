@@ -47,14 +47,21 @@ contract UpgradeViaTimelock is Script {
 
         vm.startBroadcast(pk);
         uint256 txId = multisig.submitTransaction(timelockAddr, 0, scheduleCall);
-        console2.log("Multisig txId (needs 2nd confirmation + execute):", txId);
+        console2.log("Multisig txId:", txId);
+
+        // Creator-only (threshold 1): submit already has 1 confirmation — execute now.
+        if (multisig.threshold() == 1) {
+            multisig.executeTransaction(txId);
+            console2.log("Multisig executed (threshold=1, creator-only).");
+        } else {
+            console2.log("Needs more Multisig confirmations before execute.");
+        }
         vm.stopBroadcast();
 
         bytes32 opId = timelock.hashOperation(target, 0, upgradeCall, bytes32(0), salt);
         console2.log("Timelock operation id:");
         console2.logBytes32(opId);
-        console2.log("Next: second signer confirms + executes the Multisig tx, then wait delay.");
-        console2.log("After delay anyone can: forge script ... --sig runExecute()");
+        console2.log("Next: wait delay, then EXECUTE_AFTER_DELAY=1 (or Explorer).");
 
         if (tryExecute) {
             require(timelock.isOperationReady(opId), "not ready");

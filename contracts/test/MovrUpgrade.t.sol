@@ -28,7 +28,7 @@ contract MovrUpgradeTest is Test {
     MovrChainAttestation attestation;
 
     function setUp() public {
-        multisig = new MovrMultisig(s1, s2, s3);
+        multisig = new MovrMultisig(s1, s2, s3, 2);
 
         address[] memory proposers = new address[](1);
         proposers[0] = address(multisig);

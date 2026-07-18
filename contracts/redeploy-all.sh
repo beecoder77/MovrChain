@@ -6,14 +6,15 @@
 #   - MOVR_PROFILE (holds handles/bios)
 #
 # DEPLAYs once via DeployUpgradeableStack:
-#   Multisig (2-of-3) + Timelock (24h) + UUPS proxies + ClubTreasury beacon
+#   Multisig (threshold from MULTISIG_THRESHOLD, default 1) + Timelock + UUPS proxies + ClubTreasury beacon
 #
 # After this deploy, published proxy addresses are STABLE — logic upgrades go through
-# Multisig → Timelock (see UpgradeViaTimelock.s.sol). Do not redeploy to "fix" bugs.
+# Multisig → Timelock (see ./upgrade.sh / UpgradeViaTimelock.s.sol). Do not redeploy to "fix" bugs.
 #
 # Requires in contracts/.env:
 #   PRIVATE_KEY, MOVR_TOKEN, MULTISIG_SIGNER_2, MULTISIG_SIGNER_3
-# Optional: ADMIN_ADDRESS, TIMELOCK_DELAY, STAKING_POOL, MILESTONE_POOL
+# Optional: MULTISIG_THRESHOLD=1 (creator-only) or 2 (production), ADMIN_ADDRESS, TIMELOCK_DELAY,
+#           STAKING_POOL, MILESTONE_POOL
 set -euo pipefail
 cd "$(dirname "$0")"
 

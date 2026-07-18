@@ -2,18 +2,21 @@
 pragma solidity ^0.8.24;
 
 /// @title MovrMultisig
-/// @notice Minimal 2-of-3 multisig for MovrChain administration.
+/// @notice Minimal 3-signer multisig for MovrChain administration.
+/// @dev Threshold is set at deploy (1–3). Use 1 for creator-only hackathon ops; 2 for production.
 contract MovrMultisig {
     error AlreadyConfirmed();
     error AlreadyExecuted();
     error InvalidSigner();
     error InvalidTarget();
+    error InvalidThreshold();
     error NotEnoughConfirmations();
     error NotSelf();
     error NotSigner();
     error TransactionNotFound();
 
-    uint256 public constant threshold = 2;
+    /// @dev Set once at deploy via MULTISIG_THRESHOLD in .env (1 = creator-only, 2 = production).
+    uint256 public immutable threshold;
 
     struct Transaction {
         address to;
@@ -43,14 +46,16 @@ contract MovrMultisig {
         _;
     }
 
-    constructor(address signer1, address signer2, address signer3) {
+    constructor(address signer1, address signer2, address signer3, uint256 threshold_) {
         if (
             signer1 == address(0) || signer2 == address(0) || signer3 == address(0) || signer1 == signer2
                 || signer1 == signer3 || signer2 == signer3
         ) {
             revert InvalidSigner();
         }
+        if (threshold_ == 0 || threshold_ > 3) revert InvalidThreshold();
 
+        threshold = threshold_;
         signers = [signer1, signer2, signer3];
         isSigner[signer1] = true;
         isSigner[signer2] = true;

@@ -88,6 +88,46 @@ function mapKnownFailure(combined: string): string | null {
   if (combined.includes("already claimed")) {
     return "You already claimed this achievement.";
   }
+  // Club / challenge reverts — match before the generic "revert" catch-all below.
+  if (
+    /\brevert\b.*\bstatus\b/.test(combined) ||
+    combined.includes("'status'") ||
+    combined.includes('"status"') ||
+    combined.includes("reason: status")
+  ) {
+    return "You already marked this challenge complete. Wait for a Captain or Admin to approve.";
+  }
+  if (
+    /\brevert\b.*\bmember\b/.test(combined) ||
+    combined.includes("'member'") ||
+    combined.includes('"member"') ||
+    combined.includes("reason: member")
+  ) {
+    return "Only club members can mark a challenge complete. Refresh and check your progress.";
+  }
+  if (
+    /\brevert\b.*\bmanager\b/.test(combined) ||
+    combined.includes("'manager'") ||
+    combined.includes('"manager"') ||
+    combined.includes("reason: manager")
+  ) {
+    return "Only the club Captain or Admins can do that. Ask a manager, or refresh if your role just changed.";
+  }
+  if (
+    /\brevert\b.*\bamount\b/.test(combined) ||
+    combined.includes("'amount'") ||
+    combined.includes('"amount"') ||
+    combined.includes("reason: amount")
+  ) {
+    return "Not enough unreserved MOVR in the club treasury for that amount. Lower the reward, or wait until active proposals free reserved funds.";
+  }
+  if (
+    /\brevert\b.*\breward\b/.test(combined) ||
+    combined.includes("'reward'") ||
+    combined.includes('"reward"')
+  ) {
+    return "Reward must be greater than zero.";
+  }
   if (combined.includes("out of gas") || combined.includes("intrinsic gas too low")) {
     return "Transaction ran out of gas on Monad. Retry — the app will re-estimate a higher gas limit. On Monad, gas_limit should stay close to the estimate to avoid overpaying.";
   }

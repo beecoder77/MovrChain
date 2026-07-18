@@ -116,8 +116,13 @@ contract MovrClubTest is Test {
         assertTrue(t.votingClosed(pid));
         assertTrue(t.canExecute(pid));
 
+        // Regular member cannot execute — Captain / Admin only
         uint256 before = movr.balanceOf(alice);
         vm.prank(alice);
+        vm.expectRevert(bytes("manager"));
+        t.execute(pid);
+
+        vm.prank(creator);
         t.execute(pid);
         assertEq(movr.balanceOf(alice), before + 5 ether);
         assertTrue(badges.eligible(alice, uint8(ClubBadgeNFT.Badge.PulsePayer)));
@@ -140,6 +145,7 @@ contract MovrClubTest is Test {
 
         // Only 1 of 2 members voted — cannot execute yet
         assertFalse(t.votingClosed(pid));
+        vm.prank(creator);
         vm.expectRevert(bytes("voting open"));
         t.execute(pid);
 
@@ -152,6 +158,31 @@ contract MovrClubTest is Test {
         t.vote(pid, false);
 
         assertTrue(t.canExecute(pid));
+        vm.prank(creator);
+        t.execute(pid);
+    }
+
+    function testNonManagerCannotExecute() public {
+        vm.prank(creator);
+        (uint256 clubId, address treasury) = registry.createClub("Auth", true);
+        vm.prank(creator);
+        registry.addMember(clubId, alice);
+
+        movr.mint(alice, 20 ether);
+        ClubTreasury t = ClubTreasury(treasury);
+        vm.startPrank(alice);
+        movr.approve(treasury, 20 ether);
+        t.donate(20 ether);
+        uint256 pid = t.propose("Jerseys", "kit", 3 ether);
+        t.vote(pid, true);
+        vm.stopPrank();
+
+        vm.prank(creator);
+        t.vote(pid, true);
+        assertTrue(t.canExecute(pid));
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("manager"));
         t.execute(pid);
     }
 

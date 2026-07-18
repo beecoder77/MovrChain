@@ -34,18 +34,22 @@ contract DeployUpgradeableStack is Script {
         address signer2 = vm.envAddress("MULTISIG_SIGNER_2");
         address signer3 = vm.envAddress("MULTISIG_SIGNER_3");
         uint256 delay = vm.envOr("TIMELOCK_DELAY", DEFAULT_DELAY);
+        // 1 = creator-only (hackathon); 2 = production 2-of-3
+        uint256 multisigThreshold = vm.envOr("MULTISIG_THRESHOLD", uint256(1));
 
         require(signer2 != address(0) && signer3 != address(0), "signers");
         require(signer2 != deployer && signer3 != deployer && signer2 != signer3, "signers distinct");
+        require(multisigThreshold >= 1 && multisigThreshold <= 3, "threshold");
 
         console2.log("Deployer:", deployer);
         console2.log("MOVR_TOKEN:", movr);
         console2.log("Timelock delay (s):", delay);
+        console2.log("Multisig threshold:", multisigThreshold);
 
         vm.startBroadcast(pk);
 
         // ---- Authority ----
-        MovrMultisig multisig = new MovrMultisig(deployer, signer2, signer3);
+        MovrMultisig multisig = new MovrMultisig(deployer, signer2, signer3, multisigThreshold);
         address[] memory proposers = new address[](1);
         proposers[0] = address(multisig);
         address[] memory executors = new address[](1);

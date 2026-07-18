@@ -1,6 +1,7 @@
-import { useReadContracts, type UseWriteContractReturnType } from "wagmi";
+import { useEffect, useRef, useState } from "react";
+import { useReadContract, useReadContracts, type UseWriteContractReturnType } from "wagmi";
 import { monadTestnet } from "viem/chains";
-import type { PublicClient } from "viem";
+import { zeroAddress, type PublicClient } from "viem";
 import {
   APPROVE_CHALLENGE_GAS,
   CANCEL_CHALLENGE_GAS,
@@ -17,7 +18,7 @@ import {
   SUBMIT_CHALLENGE_GAS,
   type ParsedChallenge,
 } from "../lib/clubChallenges";
-import { bufferedClubGas } from "../lib/clubs";
+import { bufferedClubGas, CLUB_TREASURY_ABI } from "../lib/clubs";
 import { formatMovr, parseMovrInput } from "../lib/achievements";
 import {
   memberDisplayLabel,
@@ -25,19 +26,25 @@ import {
   PROFILE_ABI,
   PROFILE_ADDRESS,
 } from "../lib/profile";
-import { Button } from "../design-system/components";
-import { useState } from "react";
+import { formatWalletError } from "../lib/errors";
+import { Alert, Button } from "../design-system/components";
 
 type ClubChallengesPanelProps = {
   clubId: bigint;
   address: `0x${string}`;
+  treasury: `0x${string}` | undefined;
   members: readonly `0x${string}`[];
   isMember: boolean;
   isManager: boolean;
   busy: boolean;
+  /** True when the last write was rejected or the receipt reverted — unlock local pending. */
+  txFailed: boolean;
+  /** Parent wallet / receipt warning — shown inline when the create form is open. */
+  parentWarning?: string | null;
   challenges: ParsedChallenge[];
   onRefresh: () => void;
   onWrite: (fn: () => void) => void;
+  onWarn: (message: string) => void;
   writeContract: UseWriteContractReturnType["writeContract"];
   publicClient: PublicClient | undefined;
 };
@@ -45,12 +52,16 @@ type ClubChallengesPanelProps = {
 export function ClubChallengesPanel({
   clubId,
   address,
+  treasury,
   members,
   isMember,
   isManager,
   busy,
+  txFailed,
+  parentWarning = null,
   challenges,
   onWrite,
+  onWarn,
   writeContract,
   publicClient,
 }: ClubChallengesPanelProps) {
@@ -59,6 +70,95 @@ export function ClubChallengesPanel({
   const [duration, setDuration] = useState("7");
   const [unit, setUnit] = useState(String(DurationUnit.Days));
   const [reward, setReward] = useState("5");
+  /** Inline form errors — footer alerts are below the fold on long club pages. */
+  const [formError, setFormError] = useState<string | null>(null);
+  const formErrorRef = useRef<HTMLDivElement>(null);
+  /** Locks the form during async gas estimate before wagmi `isPending` flips. */
+  const [creating, setCreating] = useState(false);
+  /** Challenge ids optimistically marked pending so Mark complete cannot be spam-clicked. */
+  const [optimisticPending, setOptimisticPending] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [actionPending, setActionPending] = useState(false);
+  /** Sync guard — setState alone can miss a double-click in the same tick. */
+  const submitGuardRef = useRef<string | null>(null);
+  const locked = busy || creating || actionPending;
+
+  const showFormError = (message: string) => {
+    setFormError(message);
+    onWarn(message);
+    requestAnimationFrame(() => {
+      formErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  };
+
+  const dropOptimistic = (key: string) => {
+    setOptimisticPending((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  };
+
+  // Unlock on wallet reject / on-chain revert — only drop the submit that failed.
+  useEffect(() => {
+    if (txFailed) {
+      setCreating(false);
+      setActionPending(false);
+      const key = submitGuardRef.current;
+      if (key) {
+        dropOptimistic(key);
+        submitGuardRef.current = null;
+      }
+    }
+  }, [txFailed]);
+
+  useEffect(() => {
+    if (!busy) {
+      setCreating(false);
+      setActionPending(false);
+      // Keep optimistic Pending until chain status catches up; clear sync guard so
+      // other challenges remain actionable.
+      if (!txFailed) {
+        submitGuardRef.current = null;
+      }
+    }
+  }, [busy, txFailed]);
+
+  const { data: availableRaw, refetch: refetchAvailable } = useReadContract({
+    address: treasury,
+    abi: CLUB_TREASURY_ABI,
+    functionName: "available",
+    chainId: monadTestnet.id,
+    query: {
+      enabled: Boolean(treasury) && treasury !== zeroAddress,
+      staleTime: 0,
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
+    },
+  });
+  const available = (availableRaw as bigint | undefined) ?? 0n;
+
+  // After donate / any club tx settles, pull a fresh available balance.
+  useEffect(() => {
+    if (!busy && treasury && treasury !== zeroAddress) {
+      void refetchAvailable();
+    }
+  }, [busy, treasury, refetchAvailable]);
+
+  // Drop stale "not enough treasury" copy once the live balance covers the reward.
+  useEffect(() => {
+    const rewardWei = parseMovrInput(reward);
+    if (
+      formError?.includes("available") &&
+      rewardWei !== null &&
+      rewardWei > 0n &&
+      available >= rewardWei
+    ) {
+      setFormError(null);
+    }
+  }, [available, reward, formError]);
 
   const statusReads = useReadContracts({
     contracts: challenges.flatMap((c) =>
@@ -72,9 +172,50 @@ export function ClubChallengesPanel({
     ),
     query: {
       enabled: challengesLive() && challenges.length > 0 && members.length > 0,
-      staleTime: 4_000,
+      staleTime: 0,
+      refetchOnMount: "always",
+      // Poll until optimistic Pending is confirmed on-chain (avoids minutes-old cache).
+      refetchInterval: optimisticPending.size > 0 ? 2_000 : false,
     },
   });
+
+  // After any write settles, refresh completion statuses immediately (avoid minutes-old cache).
+  useEffect(() => {
+    if (!busy) {
+      void statusReads.refetch();
+    }
+  }, [busy, statusReads.refetch]);
+
+  // If a submit write failed/reverted, re-read chain status — a prior success may already be Pending.
+  useEffect(() => {
+    if (txFailed) {
+      void statusReads.refetch();
+    }
+  }, [txFailed, statusReads.refetch]);
+
+  // Once chain confirms Pending/Approved/Rejected, drop matching optimistic entries.
+  useEffect(() => {
+    if (!statusReads.data || optimisticPending.size === 0) return;
+    setOptimisticPending((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const key of prev) {
+        const challengeId = BigInt(key);
+        const idx = challenges.findIndex((c) => c.id === challengeId);
+        if (idx < 0) continue;
+        const mi = members.findIndex(
+          (m) => m.toLowerCase() === address.toLowerCase(),
+        );
+        if (mi < 0) continue;
+        const row = statusReads.data?.[idx * members.length + mi];
+        if (row?.status === "success" && Number(row.result) > CompletionStatus.None) {
+          next.delete(key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [statusReads.data, optimisticPending, challenges, members, address]);
 
   const profileReads = useReadContracts({
     contracts: members.map((m) => ({
@@ -93,8 +234,18 @@ export function ClubChallengesPanel({
     const mi = members.findIndex((m) => m.toLowerCase() === member.toLowerCase());
     if (mi < 0) return CompletionStatus.None;
     const row = statusReads.data?.[idx * members.length + mi];
-    if (!row || row.status !== "success") return CompletionStatus.None;
-    return Number(row.result);
+    if (row?.status === "success") {
+      const onChain = Number(row.result);
+      if (onChain > CompletionStatus.None) return onChain;
+    }
+    // Optimistic: hide Mark complete immediately after a successful submit click.
+    if (
+      member.toLowerCase() === address.toLowerCase() &&
+      optimisticPending.has(challengeId.toString())
+    ) {
+      return CompletionStatus.Pending;
+    }
+    return CompletionStatus.None;
   };
 
   const memberLabel = (m: `0x${string}`, i: number) => {
@@ -105,55 +256,121 @@ export function ClubChallengesPanel({
   };
 
   const handleCreate = () => {
+    if (locked) return;
+    setFormError(null);
+    if (!isManager) {
+      showFormError("Only the club Captain or Admins can create challenges.");
+      return;
+    }
     const dur = Number(duration);
     const rewardWei = parseMovrInput(reward);
     const unitNum = Number(unit);
     const maxDur = unitNum === DurationUnit.Months ? 3 : 90;
-    if (!rule.trim() || !Number.isFinite(dur) || dur <= 0 || dur > maxDur) return;
-    if (!rewardWei || rewardWei === 0n) return;
-    onWrite(() => {
-      void (async () => {
-        let gas = CREATE_CHALLENGE_GAS;
-        try {
-          if (publicClient) {
-            const est = await publicClient.estimateContractGas({
-              address: CLUB_CHALLENGES,
-              abi: CLUB_CHALLENGES_ABI,
-              functionName: "createChallenge",
-              args: [clubId, rule.trim(), unitNum, dur, rewardWei],
-              account: address,
-            });
-            gas = bufferedClubGas(est, CREATE_CHALLENGE_GAS);
-          }
-        } catch {
-          gas = CREATE_CHALLENGE_GAS;
+    if (!rule.trim() || !Number.isFinite(dur) || dur <= 0 || dur > maxDur) {
+      showFormError("Add a rule and a valid duration (max 90 days / 3 months).");
+      return;
+    }
+    if (!rewardWei || rewardWei === 0n) {
+      showFormError("Enter a reward greater than zero.");
+      return;
+    }
+
+    setCreating(true);
+    void (async () => {
+      // Always read live available — cached value goes stale after donate.
+      const fresh = await refetchAvailable();
+      const liveAvailable =
+        (fresh.data as bigint | undefined) ??
+        (availableRaw as bigint | undefined) ??
+        0n;
+
+      if (rewardWei > liveAvailable) {
+        setCreating(false);
+        showFormError(
+          `Treasury only has ${formatMovr(liveAvailable)} MOVR available (unreserved). Lower the reward or free reserved proposal funds.`,
+        );
+        return;
+      }
+
+      const args = [clubId, rule.trim(), unitNum, dur, rewardWei] as const;
+      let gas = CREATE_CHALLENGE_GAS;
+      try {
+        if (publicClient) {
+          const est = await publicClient.estimateContractGas({
+            address: CLUB_CHALLENGES,
+            abi: CLUB_CHALLENGES_ABI,
+            functionName: "createChallenge",
+            args,
+            account: address,
+          });
+          gas = bufferedClubGas(est, CREATE_CHALLENGE_GAS);
         }
-        writeContract({
-          address: CLUB_CHALLENGES,
-          abi: CLUB_CHALLENGES_ABI,
-          functionName: "createChallenge",
-          args: [clubId, rule.trim(), unitNum, dur, rewardWei],
-          chainId: monadTestnet.id,
-          gas,
-        });
-      })();
-    });
+      } catch (e) {
+        setCreating(false);
+        void refetchAvailable();
+        showFormError(
+          formatWalletError(e instanceof Error ? e : new Error(String(e))) ??
+            "Cannot create this challenge. Check manager role and treasury balance.",
+        );
+        return;
+      }
+      onWrite(() => {
+        try {
+          writeContract({
+            address: CLUB_CHALLENGES,
+            abi: CLUB_CHALLENGES_ABI,
+            functionName: "createChallenge",
+            args,
+            chainId: monadTestnet.id,
+            gas,
+          });
+        } catch (e) {
+          setCreating(false);
+          showFormError(
+            formatWalletError(e instanceof Error ? e : new Error(String(e))) ??
+              "Could not open wallet to create the challenge.",
+          );
+        }
+      });
+    })();
   };
 
   const handleSubmit = (challengeId: bigint) => {
-    onWrite(() =>
-      writeContract({
-        address: CLUB_CHALLENGES,
-        abi: CLUB_CHALLENGES_ABI,
-        functionName: "submitCompletion",
-        args: [challengeId],
-        chainId: monadTestnet.id,
-        gas: SUBMIT_CHALLENGE_GAS,
-      }),
-    );
+    const key = challengeId.toString();
+    if (locked || submitGuardRef.current) return;
+    if (optimisticPending.has(key)) return;
+    if (statusFor(challengeId, address) !== CompletionStatus.None) return;
+
+    submitGuardRef.current = key;
+    setActionPending(true);
+    setOptimisticPending((prev) => new Set(prev).add(key));
+    setFormError(null);
+
+    onWrite(() => {
+      try {
+        writeContract({
+          address: CLUB_CHALLENGES,
+          abi: CLUB_CHALLENGES_ABI,
+          functionName: "submitCompletion",
+          args: [challengeId],
+          chainId: monadTestnet.id,
+          gas: SUBMIT_CHALLENGE_GAS,
+        });
+      } catch (e) {
+        submitGuardRef.current = null;
+        setActionPending(false);
+        dropOptimistic(key);
+        showFormError(
+          formatWalletError(e instanceof Error ? e : new Error(String(e))) ??
+            "Could not submit completion.",
+        );
+      }
+    });
   };
 
   const handleApprove = (challengeId: bigint, member: `0x${string}`) => {
+    if (locked) return;
+    setActionPending(true);
     onWrite(() =>
       writeContract({
         address: CLUB_CHALLENGES,
@@ -167,6 +384,8 @@ export function ClubChallengesPanel({
   };
 
   const handleReject = (challengeId: bigint, member: `0x${string}`) => {
+    if (locked) return;
+    setActionPending(true);
     onWrite(() =>
       writeContract({
         address: CLUB_CHALLENGES,
@@ -180,6 +399,8 @@ export function ClubChallengesPanel({
   };
 
   const handleSettle = (challengeId: bigint) => {
+    if (locked) return;
+    setActionPending(true);
     onWrite(() =>
       writeContract({
         address: CLUB_CHALLENGES,
@@ -193,6 +414,8 @@ export function ClubChallengesPanel({
   };
 
   const handleCancelChallenge = (challengeId: bigint) => {
+    if (locked) return;
+    setActionPending(true);
     onWrite(() =>
       writeContract({
         address: CLUB_CHALLENGES,
@@ -233,8 +456,12 @@ export function ClubChallengesPanel({
         <Button
           variant="secondary"
           block
-          disabled={busy}
-          onClick={() => setOpen(true)}
+          disabled={locked}
+          onClick={() => {
+            setFormError(null);
+            setOpen(true);
+            void refetchAvailable();
+          }}
         >
           Start a challenge
         </Button>
@@ -242,13 +469,21 @@ export function ClubChallengesPanel({
 
       {isManager && open && (
         <div className="club-detail__propose-form">
+          {(formError || parentWarning) && (
+            <div ref={formErrorRef}>
+              <Alert tone="warning">{formError ?? parentWarning}</Alert>
+            </div>
+          )}
           <input
             className="clubs-screen__input"
             placeholder="Challenge rule (any text)"
             value={rule}
-            disabled={busy}
+            disabled={locked}
             maxLength={280}
-            onChange={(e) => setRule(e.target.value)}
+            onChange={(e) => {
+              setFormError(null);
+              setRule(e.target.value);
+            }}
           />
           <div className="club-challenge__duration-row">
             <input
@@ -257,15 +492,21 @@ export function ClubChallengesPanel({
               min={1}
               max={90}
               value={duration}
-              disabled={busy}
-              onChange={(e) => setDuration(e.target.value)}
+              disabled={locked}
+              onChange={(e) => {
+                setFormError(null);
+                setDuration(e.target.value);
+              }}
               aria-label="Duration amount"
             />
             <select
               className="clubs-screen__input club-challenge__unit-select"
               value={unit}
-              disabled={busy}
-              onChange={(e) => setUnit(e.target.value)}
+              disabled={locked}
+              onChange={(e) => {
+                setFormError(null);
+                setUnit(e.target.value);
+              }}
               aria-label="Duration unit"
             >
               <option value={String(DurationUnit.Hours)}>Hours</option>
@@ -277,17 +518,32 @@ export function ClubChallengesPanel({
             className="clubs-screen__input"
             placeholder="Reward MOVR (from treasury)"
             value={reward}
-            disabled={busy}
-            onChange={(e) => setReward(e.target.value)}
+            disabled={locked}
+            onChange={(e) => {
+              setFormError(null);
+              setReward(e.target.value);
+            }}
           />
-          <Button block loading={busy} disabled={busy} onClick={handleCreate}>
-            Confirm challenge
+          <p className="club-detail__hint">
+            Available in treasury: {formatMovr(available)} MOVR (excludes funds
+            reserved by active proposals). Updates after donations settle.
+          </p>
+          <Button
+            block
+            loading={locked}
+            disabled={locked}
+            onClick={handleCreate}
+          >
+            {locked ? "Confirming…" : "Confirm challenge"}
           </Button>
           <Button
             variant="ghost"
             block
-            disabled={busy}
-            onClick={() => setOpen(false)}
+            disabled={locked}
+            onClick={() => {
+              setFormError(null);
+              setOpen(false);
+            }}
           >
             Cancel
           </Button>
@@ -317,10 +573,11 @@ export function ClubChallengesPanel({
                 <Button
                   variant="secondary"
                   block
-                  disabled={busy}
+                  loading={locked}
+                  disabled={locked}
                   onClick={() => handleSubmit(c.id)}
                 >
-                  Mark complete
+                  {locked ? "Submitting…" : "Mark complete"}
                 </Button>
               )}
               {isMember && myStatus > 0 && (
@@ -340,7 +597,7 @@ export function ClubChallengesPanel({
                           <button
                             type="button"
                             className="club-detail__role-action"
-                            disabled={busy}
+                            disabled={locked}
                             onClick={() => handleApprove(c.id, m)}
                           >
                             Approve
@@ -348,7 +605,7 @@ export function ClubChallengesPanel({
                           <button
                             type="button"
                             className="club-detail__role-action"
-                            disabled={busy}
+                            disabled={locked}
                             onClick={() => handleReject(c.id, m)}
                           >
                             Reject
@@ -364,7 +621,7 @@ export function ClubChallengesPanel({
                 <Button
                   variant="ghost"
                   block
-                  disabled={busy}
+                  disabled={locked}
                   onClick={() => handleCancelChallenge(c.id)}
                 >
                   Cancel challenge — refund treasury
@@ -372,7 +629,11 @@ export function ClubChallengesPanel({
               )}
 
               {c.state === 0 && ended && (
-                <Button block disabled={busy} onClick={() => handleSettle(c.id)}>
+                <Button
+                  block
+                  disabled={locked}
+                  onClick={() => handleSettle(c.id)}
+                >
                   Settle — split reward to approved members
                 </Button>
               )}

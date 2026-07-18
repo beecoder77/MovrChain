@@ -9,6 +9,7 @@ import {ClubMemberNFT} from "./ClubMemberNFT.sol";
 
 interface IClubRegistryView {
     function isMember(uint256 clubId, address account) external view returns (bool);
+    function isClubManager(uint256 clubId, address account) external view returns (bool);
     function memberCount(uint256 clubId) external view returns (uint256);
     function members(uint256 clubId) external view returns (address[] memory);
     function creditDonationStats(address donor, uint256 amount) external;
@@ -247,7 +248,9 @@ contract ClubTreasury is Initializable, ReentrancyGuard {
         emit Voted(proposalId, msg.sender, support, weight);
     }
 
+    /// @notice Captain or Admin only — members vote; managers settle the spend.
     function execute(uint256 proposalId) external nonReentrant {
+        require(registry.isClubManager(clubId, msg.sender), "manager");
         require(proposalId < _proposals.length, "id");
         Proposal storage p = _proposals[proposalId];
         require(p.state == ProposalState.Active, "state");
