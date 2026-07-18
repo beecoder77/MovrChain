@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatUnits, zeroAddress } from "viem";
 import {
   useReadContract,
@@ -15,6 +15,7 @@ import {
   formatMovr,
   MOVR_TOKEN,
   parseMovrInput,
+  projectStakingRewards,
   STAKE_GAS,
   STAKING_ABI,
   STAKING_CONTRACT,
@@ -39,6 +40,26 @@ type StakingDetailScreenProps = {
   viewerAddress: `0x${string}`;
   onBack?: () => void;
 };
+
+function parseDonatePreviewBps(
+  input: string,
+  fallbackBps: number,
+): number {
+  const pct = Number(input);
+  if (!Number.isFinite(pct) || pct < 0) return fallbackBps;
+  if (pct === 0) return 0;
+  const bps = Math.round(pct * 100);
+  if (bps < MIN_DONATE_BPS || bps > MAX_DONATE_BPS) return fallbackBps;
+  return bps;
+}
+
+function stakeAmountFromRaw(stakeRaw: unknown): bigint {
+  if (stakeRaw && Array.isArray(stakeRaw)) return stakeRaw[0] as bigint;
+  if (stakeRaw && typeof stakeRaw === "object" && "amount" in stakeRaw) {
+    return (stakeRaw as { amount: bigint }).amount;
+  }
+  return 0n;
+}
 
 export function StakingDetailScreen({
   address,
@@ -75,6 +96,13 @@ export function StakingDetailScreen({
     abi: STAKING_ABI,
     functionName: "boostBpsOf",
     args: [address],
+    chainId: monadTestnet.id,
+  });
+
+  const { data: baseRateRaw } = useReadContract({
+    address: STAKING_CONTRACT,
+    abi: STAKING_ABI,
+    functionName: "rewardPerTokenPerSecond",
     chainId: monadTestnet.id,
   });
 
@@ -117,15 +145,10 @@ export function StakingDetailScreen({
   const donateBps = Number(donateBpsRaw ?? 0);
   const inClub = Boolean(clubIdRaw && (clubIdRaw as bigint) > 0n);
 
-  const staked =
-    stakeRaw && Array.isArray(stakeRaw)
-      ? (stakeRaw[0] as bigint)
-      : stakeRaw && typeof stakeRaw === "object" && "amount" in stakeRaw
-        ? ((stakeRaw as { amount: bigint }).amount)
-        : 0n;
-
+  const staked = stakeAmountFromRaw(stakeRaw);
   const pendingWei = (pending as bigint | undefined) ?? 0n;
   const boost = Number(boostBps ?? 0n);
+  const baseRate = (baseRateRaw as bigint | undefined) ?? 0n;
   const balance = (walletBalance as bigint | undefined) ?? 0n;
   const allow = (allowance as bigint | undefined) ?? 0n;
 
@@ -187,6 +210,22 @@ export function StakingDetailScreen({
 
   const parsed = parseMovrInput(amount);
   const needsApprove = parsed !== null && parsed > 0n && allow < parsed;
+
+  /** Project on current stake; if none, use the amount field as a what-if. */
+  const projectionPrincipal = staked > 0n ? staked : (parsed ?? 0n);
+  const projectionIsPreview = staked === 0n && projectionPrincipal > 0n;
+  const previewDonateBps = parseDonatePreviewBps(donateInput, donateBps);
+
+  const projection = useMemo(
+    () =>
+      projectStakingRewards({
+        amount: projectionPrincipal,
+        rewardPerTokenPerSecond: baseRate,
+        boostBps: boost,
+        donateBps: previewDonateBps,
+      }),
+    [projectionPrincipal, baseRate, boost, previewDonateBps],
+  );
 
   const handleApprove = () => {
     if (!canAct) {
@@ -315,6 +354,34 @@ export function StakingDetailScreen({
     );
   };
 
+  const showClubSplit = previewDonateBps > 0;
+
+  let projectionMeta = "Stake or enter an amount to project yield.";
+  if (projectionPrincipal > 0n) {
+    const basis = projectionIsPreview
+      ? `If you stake ${formatMovr(projectionPrincipal)} MOVR`
+      : `On ${formatMovr(projectionPrincipal)} MOVR staked`;
+    const donateLabel = showClubSplit
+      ? ` · ${formatDonateBps(previewDonateBps)} to club`
+      : " · no club donate";
+    projectionMeta = `${basis} · ${formatBoostBps(boost)} boost${donateLabel}`;
+  }
+
+  let primaryAction: ReactNode = null;
+  if (canAct && needsApprove) {
+    primaryAction = (
+      <Button block loading={busy} disabled={busy} onClick={handleApprove}>
+        {busy ? "Approving…" : "Approve MOVR"}
+      </Button>
+    );
+  } else if (canAct) {
+    primaryAction = (
+      <Button block loading={busy} disabled={busy} onClick={handleStake}>
+        {busy ? "Staking…" : "Stake MOVR"}
+      </Button>
+    );
+  }
+
   return (
     <section className="stack-detail" aria-labelledby="staking-heading">
       <header className="stack-detail__header">
@@ -344,7 +411,7 @@ export function StakingDetailScreen({
           <span className="stack-detail__stat-value">
             {formatBoostBps(boost)}
           </span>
-          <span className="stack-detail__stat-label">NFT boost</span>
+          <span className="stack-detail__stat-label">NFT + club boost</span>
         </div>
         <div className="stack-detail__stat">
           <span className="stack-detail__stat-value">
@@ -352,6 +419,52 @@ export function StakingDetailScreen({
           </span>
           <span className="stack-detail__stat-label">Wallet MOVR</span>
         </div>
+      </div>
+
+      <div
+        className="stack-detail__projection"
+        aria-label="Expected rewards"
+      >
+        <div className="stack-detail__projection-head">
+          <h2 className="stack-detail__projection-title">Expected rewards</h2>
+          <p className="stack-detail__projection-meta">{projectionMeta}</p>
+        </div>
+
+        {projectionPrincipal === 0n ? (
+          <p className="stack-detail__projection-empty">
+            Projections use your live rate (base + achievement & club-badge
+            boost) and optional club yield donate on claim.
+          </p>
+        ) : (
+          <table className="stack-detail__proj-table">
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                <th scope="col">You keep</th>
+                {showClubSplit && <th scope="col">Club yield</th>}
+                <th scope="col">Gross</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(
+                [
+                  ["Day", projection.day],
+                  ["Month", projection.month],
+                  ["Year", projection.year],
+                ] as const
+              ).map(([label, row]) => (
+                <tr key={label}>
+                  <th scope="row">{label}</th>
+                  <td>{formatMovr(row.kept, 6)} MOVR</td>
+                  {showClubSplit && (
+                    <td>{formatMovr(row.club, 6)} MOVR</td>
+                  )}
+                  <td>{formatMovr(row.gross, 6)} MOVR</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <label className="stack-detail__field">
@@ -384,7 +497,8 @@ export function StakingDetailScreen({
         </p>
         <p className="stack-detail__donate-copy">
           On each claim, this % of rewards goes to your club treasury. Members:
-          1× vote · Club NFT: 2× · Top 3 donors: 3×.
+          1× vote · Club NFT: 2× · Top 3 donors: 3×. Projections above update
+          as you edit this %.
         </p>
         <div className="stack-detail__donate-row">
           <input
@@ -431,15 +545,7 @@ export function StakingDetailScreen({
       )}
 
       <div className="stack-detail__actions">
-        {canAct && needsApprove ? (
-          <Button block loading={busy} disabled={busy} onClick={handleApprove}>
-            {busy ? "Approving…" : "Approve MOVR"}
-          </Button>
-        ) : canAct ? (
-          <Button block loading={busy} disabled={busy} onClick={handleStake}>
-            {busy ? "Staking…" : "Stake MOVR"}
-          </Button>
-        ) : null}
+        {primaryAction}
         {canAct && (
           <>
             <Button

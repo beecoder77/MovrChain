@@ -104,6 +104,7 @@ export const STAKING_ABI = [
       { name: "amount", type: "uint256" },
       { name: "rewardDebt", type: "uint256" },
       { name: "lastUpdate", type: "uint256" },
+      { name: "lockedRate", type: "uint256" },
     ],
     stateMutability: "view",
   },
@@ -118,6 +119,13 @@ export const STAKING_ABI = [
     type: "function",
     name: "boostBpsOf",
     inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "rewardPerTokenPerSecond",
+    inputs: [],
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
   },
@@ -245,6 +253,88 @@ export function formatProgressValue(
 
 export function formatBoostBps(bps: number): string {
   return `+${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
+}
+
+/** Live rate = base × (1 + boostBps/10_000) — matches MovrStaking._liveRate. */
+export function boostedRewardRate(
+  rewardPerTokenPerSecond: bigint,
+  boostBps: number,
+): bigint {
+  if (rewardPerTokenPerSecond === 0n) return 0n;
+  const bps = BigInt(Math.max(0, Math.floor(boostBps)));
+  return (
+    rewardPerTokenPerSecond + (rewardPerTokenPerSecond * bps) / 10_000n
+  );
+}
+
+/** Accrual: (amount × rate × seconds) / 1e18 — matches MovrStaking.pendingReward. */
+export function stakingAccrual(
+  amount: bigint,
+  rate: bigint,
+  seconds: bigint,
+): bigint {
+  if (amount === 0n || rate === 0n || seconds === 0n) return 0n;
+  return (amount * rate * seconds) / 10n ** 18n;
+}
+
+export type StakingHorizonReward = {
+  gross: bigint;
+  kept: bigint;
+  club: bigint;
+};
+
+export type StakingRewardProjection = {
+  rate: bigint;
+  day: StakingHorizonReward;
+  month: StakingHorizonReward;
+  year: StakingHorizonReward;
+};
+
+const SECONDS_PER_DAY = 86_400n;
+const DAYS_PER_MONTH = 30n;
+const DAYS_PER_YEAR = 365n;
+
+function splitByDonate(
+  gross: bigint,
+  donateBps: number,
+): StakingHorizonReward {
+  const bps = Math.max(0, Math.min(10_000, Math.floor(donateBps)));
+  const club = bps > 0 ? (gross * BigInt(bps)) / 10_000n : 0n;
+  return { gross, kept: gross - club, club };
+}
+
+/**
+ * Forward-looking stake yield for day / month / year.
+ * Includes achievement + club-badge boost via `boostBps`, and club treasury
+ * share via `donateBps` (claim-time donate stack).
+ */
+export function projectStakingRewards(args: {
+  amount: bigint;
+  rewardPerTokenPerSecond: bigint;
+  boostBps: number;
+  donateBps: number;
+}): StakingRewardProjection {
+  const rate = boostedRewardRate(
+    args.rewardPerTokenPerSecond,
+    args.boostBps,
+  );
+  const dayGross = stakingAccrual(args.amount, rate, SECONDS_PER_DAY);
+  const monthGross = stakingAccrual(
+    args.amount,
+    rate,
+    SECONDS_PER_DAY * DAYS_PER_MONTH,
+  );
+  const yearGross = stakingAccrual(
+    args.amount,
+    rate,
+    SECONDS_PER_DAY * DAYS_PER_YEAR,
+  );
+  return {
+    rate,
+    day: splitByDonate(dayGross, args.donateBps),
+    month: splitByDonate(monthGross, args.donateBps),
+    year: splitByDonate(yearGross, args.donateBps),
+  };
 }
 
 export function formatMovr(wei: bigint, digits = 4): string {
