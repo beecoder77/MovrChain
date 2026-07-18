@@ -8,7 +8,6 @@ import {
 import { monadTestnet } from "viem/chains";
 import { Button, Alert } from "../design-system/components";
 import { formatWalletError } from "../lib/errors";
-import { walletConnectEnabled } from "../lib/wagmi";
 
 function isMobileUa(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -144,21 +143,6 @@ export function ConnectScreen() {
 
         {connectError && (
           <Alert className="connect-screen__alert">{connectError}</Alert>
-        )}
-
-        {!walletConnectEnabled && mobile && !injectedReady && (
-          <Alert className="connect-screen__alert">
-            Mobile wallet connect needs a WalletConnect Project ID (
-            <code>VITE_WALLETCONNECT_PROJECT_ID</code>). Free at{" "}
-            <a
-              href="https://cloud.reown.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              cloud.reown.com
-            </a>
-            .
-          </Alert>
         )}
 
         <div className="connect-screen__actions">
