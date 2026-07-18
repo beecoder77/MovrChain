@@ -355,16 +355,18 @@ export function StakingDetailScreen({
   };
 
   const showClubSplit = previewDonateBps > 0;
+  const amountDiffersFromStake =
+    staked > 0n && parsed !== null && parsed > 0n && parsed !== staked;
 
-  let projectionMeta = "Stake or enter an amount to project yield.";
+  let projectionMeta =
+    "Enter an amount below to preview rewards, or stake MOVR first.";
   if (projectionPrincipal > 0n) {
-    const basis = projectionIsPreview
-      ? `If you stake ${formatMovr(projectionPrincipal)} MOVR`
-      : `On ${formatMovr(projectionPrincipal)} MOVR staked`;
     const donateLabel = showClubSplit
-      ? ` · ${formatDonateBps(previewDonateBps)} to club`
-      : " · no club donate";
-    projectionMeta = `${basis} · ${formatBoostBps(boost)} boost${donateLabel}`;
+      ? ` · ${formatDonateBps(previewDonateBps)} to club on claim`
+      : " · club donate off";
+    projectionMeta = projectionIsPreview
+      ? `Preview if you stake ${formatMovr(projectionPrincipal)} MOVR · ${formatBoostBps(boost)} boost${donateLabel}`
+      : `Based on your ${formatMovr(projectionPrincipal)} MOVR stake · ${formatBoostBps(boost)} boost${donateLabel}`;
   }
 
   let primaryAction: ReactNode = null;
@@ -389,8 +391,8 @@ export function StakingDetailScreen({
           Staking
         </h1>
         <p className="stack-detail__sub">
-          Stake MOVR for boost and rewards. Optionally donate 2–5% of claim
-          yield to your club treasury — top donors earn 3× voting power.
+          Stake MOVR to earn yield. Achievement and club-badge NFTs boost your
+          rate. You can send 2–5% of each claim to your club treasury.
         </p>
       </header>
 
@@ -432,20 +434,12 @@ export function StakingDetailScreen({
 
         {projectionPrincipal === 0n ? (
           <p className="stack-detail__projection-empty">
-            Projections use your live rate (base + achievement & club-badge
-            boost) and optional club yield donate on claim.
+            Numbers use today’s reward rate plus your NFT boost. Club share
+            applies only if you set a donate % and belong to a club.
           </p>
         ) : (
-          <table className="stack-detail__proj-table">
-            <thead>
-              <tr>
-                <th scope="col">Period</th>
-                <th scope="col">You keep</th>
-                {showClubSplit && <th scope="col">Club yield</th>}
-                <th scope="col">Gross</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <ul className="stack-detail__proj-periods">
               {(
                 [
                   ["Day", projection.day],
@@ -453,22 +447,50 @@ export function StakingDetailScreen({
                   ["Year", projection.year],
                 ] as const
               ).map(([label, row]) => (
-                <tr key={label}>
-                  <th scope="row">{label}</th>
-                  <td>{formatMovr(row.kept, 6)} MOVR</td>
-                  {showClubSplit && (
-                    <td>{formatMovr(row.club, 6)} MOVR</td>
-                  )}
-                  <td>{formatMovr(row.gross, 6)} MOVR</td>
-                </tr>
+                <li key={label} className="stack-detail__proj-period">
+                  <p className="stack-detail__proj-period-label">{label}</p>
+                  <dl
+                    className={
+                      showClubSplit
+                        ? "stack-detail__proj-metrics stack-detail__proj-metrics--split"
+                        : "stack-detail__proj-metrics"
+                    }
+                  >
+                    <div>
+                      <dt>You keep</dt>
+                      <dd>{formatMovr(row.kept, 6)} MOVR</dd>
+                    </div>
+                    {showClubSplit ? (
+                      <div>
+                        <dt>To club</dt>
+                        <dd>{formatMovr(row.club, 6)} MOVR</dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt>Total</dt>
+                      <dd>{formatMovr(row.gross, 6)} MOVR</dd>
+                    </div>
+                  </dl>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ul>
+            <p className="stack-detail__projection-note">
+              {amountDiffersFromStake
+                ? "The amount field below is for stake or unstake only — this estimate still uses your current stake. "
+                : null}
+              Assumes today’s rate stays the same (month = 30 days). Claiming
+              still needs a funded reward pool.
+            </p>
+          </>
         )}
       </div>
 
       <label className="stack-detail__field">
-        <span className="stack-detail__field-label">Amount (MOVR)</span>
+        <span className="stack-detail__field-label">
+          {staked > 0n
+            ? "Amount to stake or unstake (MOVR)"
+            : "Amount to stake (MOVR)"}
+        </span>
         <input
           className="stack-detail__input"
           type="text"
@@ -496,9 +518,9 @@ export function StakingDetailScreen({
           {donateBps > 0 ? formatDonateBps(donateBps) : "off"})
         </p>
         <p className="stack-detail__donate-copy">
-          On each claim, this % of rewards goes to your club treasury. Members:
-          1× vote · Club NFT: 2× · Top 3 donors: 3×. Projections above update
-          as you edit this %.
+          Taken from each claim into your club treasury. Edit the % to update
+          the estimate above (save to apply on-chain). Top 3 donors get 3×
+          voting power.
         </p>
         <div className="stack-detail__donate-row">
           <input

@@ -114,6 +114,7 @@ The **"Verify & publish"** pipeline validates the run in layers:
 - **Achievements**: The `AchievementNFT` contract defines milestone templates (e.g., First 5K, First Half Marathon, 7-Day Streak). Streak achievements require an active, time-decayed streak. Per-token boosts are snapshotted at mint, so later admin edits cannot corrupt transfer accounting.
 - **Marketplace**: Listings clear before payment and `buyNFT` is reentrancy-guarded.
 - **Staking**: Achievement and soulbound club-badge boosts are combined and capped by `maxBoostBps`.
+- **Expected rewards UI**: The Staking tab projects day / month / year yield from today’s rate × NFT boost, splits **You keep** vs **To club** using the donate %, and previews the amount field only when nothing is staked yet. While staked, the amount field is for stake/unstake only — the table stays on current stake. Estimates (30-day month) are not a guarantee of claimable `rewardReserve`.
 - **Rate changes**: Each account accrues using a locked rate for the current interval. `configureRates` applies to future intervals, not retroactively.
 - **Solvency**: Rewards are paid only from `rewardReserve`; user principal remains tracked separately in `totalStaked`. Partial claims preserve unpaid reward debt.
 - **Club donation**: Stakers may route `2–5%` of claimed yield to their current club treasury.
@@ -222,12 +223,12 @@ Current hardening baseline: **92 tests, 0 failures** across token, attestation, 
 Required pre-deploy checklist:
 
 - [x] `forge test --offline` passes with no compiler warnings.
-- [x] Every High / Medium / Low finding in `contracts/TEST_MATRIX.md` is `FIXED` (including Jul 18 2026 reaudits #1–#2).
+- [x] Every High / Medium / Low finding in `contracts/TEST_MATRIX.md` is `FIXED` (including Jul 18 2026 reaudits #1–#3).
 - [x] Constructor and one-time wiring order matches the deployment flow below (`DeployUpgradeableStack`).
+- [x] Frontend ABI/address constants and both env files match the UUPS cutover deployment.
 - [ ] Reward pools are funded without exceeding `MovrToken.MAX_SUPPLY()`.
 - [ ] Representative reads confirm bytecode and expected configuration.
-- [ ] All new implementations are source-verified on MonadScan.
-- [ ] Frontend ABI/address constants and both env files match the new deployment.
+- [ ] All new implementations are source-verified on MonadScan (proxies may remain bytecode-only; implementations verified).
 - [ ] Production trust policy is explicit: self-attest on, or trusted attester configured.
 
 > A green local suite validates the current source. It does **not** prove the addresses below run that bytecode.

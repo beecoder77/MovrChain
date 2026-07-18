@@ -1,6 +1,7 @@
 # MovrChain Security Audit Reconciliation
 
-**Status: all High / Medium / Low findings from original + Jul 18 reaudits are FIXED** (Info residuals documented).  
+**Status: all High / Medium / Low findings from original + Jul 18 reaudits #1–#2 are FIXED** (Info residuals documented).  
+Reaudit #3 (Staking Expected rewards UI): frontend **17/20 Good**; Low/Info UX residuals **OPEN** (non-blocking).  
 Foundry: `forge test --offline` → **92 passed** (Jul 18 2026 — execute manager gate).
 
 ---
@@ -67,6 +68,27 @@ Foundry: `forge test --offline` → **92 passed** (Jul 18 2026 — execute manag
 
 ---
 
+## Jul 18 2026 reaudit #3 (Staking Expected rewards UI)
+
+Scope: `StakingDetailScreen` + `projectStakingRewards` (day / month / year · boost · club yield split).  
+Impeccable frontend audit health: **17/20 Good** → post adapt/polish: responsive + caption contrast **FIXED** (A11y↑ · Responsive↑).
+
+| Sev | Area | Issue | Status | Fix / note |
+|-----|------|--------|--------|------------|
+| **Low** | Frontend UX | Projections use live rate, not mid-interval `lockedRate` | **OK** (documented) | Footnote: “today’s rate”; accrues at locked rate until next harvest |
+| **Low** | Frontend UX | Amount field ignored when `staked > 0` | **FIXED** | Label = stake/unstake; note when amount ≠ stake; meta = “Based on your … stake” |
+| **Low** | Frontend UX | Club yield column can preview donate % before join/save | **OK** (preview) | Empty + donate copy: preview updates table; save applies on-chain; needs club |
+| **Info** | Frontend a11y | Caption / muted meta on surface may sit near AA floor | **FIXED** | Projection meta/note use ink-tinted muted (`color-mix`) |
+| **Info** | Frontend responsive | 4-column proj table tight on ~320px | **FIXED** | Stacked Day/Month/Year periods + responsive metric grid |
+| **Info** | Frontend | No unit tests for `projectStakingRewards` helper | **OPEN** | Optional Vitest; math mirrored from `MovrStaking` |
+
+Feature shipped:
+- Day / month / year gross accrual: `(amount × boostedRate × seconds) / 1e18`
+- Boost = `boostBpsOf` (achievements + club badges, capped)
+- Club yield stack = `gross × donateBps / 10_000` on claim split
+
+---
+
 ## Test matrix
 
 ### MovrToken
@@ -108,6 +130,9 @@ Foundry: `forge test --offline` → **92 passed** (Jul 18 2026 — execute manag
 | S5 | `configureRates` | ➕ |
 | S6 | Empty `rewardReserve` reverts claim | ➕ |
 | S7 | Rates not retroactive (`lockedRate`) | ➕ |
+| S8 | Frontend day/month/year projection matches live rate × boost | ✅ (UI) |
+| S9 | Frontend club yield split uses donate bps (You keep / Club / Gross) | ✅ (UI) |
+| S10 | Frontend what-if uses amount field when stake is zero | ✅ (UI) |
 
 ### AchievementNFT
 | ID | Case | Status |
@@ -149,6 +174,10 @@ Foundry: `forge test --offline` → **92 passed** (Jul 18 2026 — execute manag
 | N*3 | Streak progress uses `effectiveCurrentStreakDays` | ✅ |
 | N*4 | Shared `bufferedMonadGas` (1.5×) for verify + clubs | ✅ |
 | N*5 | Reward copy uses `clubIdAtAttest` after attest | ✅ |
+| N*6 | Staking Expected rewards: Day / Month / Year stacked periods | ✅ |
+| N*7 | Projection includes NFT + club-badge boost via `boostBpsOf` | ✅ |
+| N*8 | Club yield column when donate preview > 0 | ✅ |
+| N*9 | Projection disclaimer: estimate ≠ guaranteed `rewardReserve` payout | ✅ (README) |
 
 ---
 
