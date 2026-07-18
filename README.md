@@ -469,6 +469,19 @@ To fund the `MovrStaking` reward pool with additional `MOVR` tokens (automatical
 
 *Adjust reward quantity by overriding env variables: `REWARD_AMOUNT=500000000000000000000000 ./fund-rewards.sh`.*
 
+To refill the **milestone claim pool** (`MovrMilestoneReward` — pays 1 MOVR/km on verify). After Timelock handoff, a plain ERC20 transfer into the proxy is enough:
+
+```bash
+./fund-all-pools.sh          # top milestone to ≥1M MOVR now; schedule staking fund (Timelock)
+./fund-all-pools.sh status
+# after ~24h Timelock delay:
+./fund-all-pools.sh execute  # completes staking fundRewards(1M)
+```
+
+Or milestone only: `./fund-milestone.sh` / `./fund-all-pools.sh milestone-only`.
+
+If claim reverts with `empty pool`, the milestone contract’s MOVR balance is too low — run `./fund-all-pools.sh` (or `milestone-only`), then retry claim (attest + publish can still succeed).
+
 ### Checking Roles
 
 Audit owner (`DEFAULT_ADMIN_ROLE`) and admin (`ADMIN_ROLE`) configurations on active contracts:

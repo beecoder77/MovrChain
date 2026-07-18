@@ -16,6 +16,7 @@ import {
 } from "../lib/chain";
 import { FEED_ABI, FEED_CONTRACT_ADDRESS, publishRunName } from "../lib/feed";
 import { CLUB_REGISTRY, CLUB_REGISTRY_ABI } from "../lib/clubs";
+import { MOVR_TOKEN_ADDRESS } from "../lib/contracts";
 import {
   ATTEST_GAS_FLOOR,
   PUBLISH_GAS_FLOOR,
@@ -261,6 +262,67 @@ export function VerifyClaim({
     (claimSuccess && !claimReverted) ||
     Boolean(alreadyClaimedOnChain);
 
+  const { data: isClaimableOnChain } = useReadContract({
+    address: REWARD_CONTRACT_ADDRESS,
+    abi: MILESTONE_REWARD_ABI,
+    functionName: "claimable",
+    args: address ? [runHash, address] : undefined,
+    chainId: monadTestnet.id,
+    query: {
+      enabled:
+        Boolean(REWARD_CONTRACT_ADDRESS && address) && verified && milestone,
+      staleTime: 0,
+    },
+  });
+
+  const { data: previewRunner } = useReadContract({
+    address: REWARD_CONTRACT_ADDRESS,
+    abi: MILESTONE_REWARD_ABI,
+    functionName: "previewReward",
+    args: address ? [runHash, address] : undefined,
+    chainId: monadTestnet.id,
+    query: {
+      enabled:
+        Boolean(REWARD_CONTRACT_ADDRESS && address) && verified && milestone,
+      staleTime: 0,
+    },
+  });
+
+  const { data: previewClub } = useReadContract({
+    address: REWARD_CONTRACT_ADDRESS,
+    abi: MILESTONE_REWARD_ABI,
+    functionName: "previewClubReward",
+    args: address ? [runHash, address] : undefined,
+    chainId: monadTestnet.id,
+    query: {
+      enabled:
+        Boolean(REWARD_CONTRACT_ADDRESS && address) && verified && milestone,
+      staleTime: 0,
+    },
+  });
+
+  const { data: milestonePoolBal } = useReadContract({
+    address: MOVR_TOKEN_ADDRESS,
+    abi: [
+      {
+        type: "function",
+        name: "balanceOf",
+        stateMutability: "view",
+        inputs: [{ name: "account", type: "address" }],
+        outputs: [{ type: "uint256" }],
+      },
+    ] as const,
+    functionName: "balanceOf",
+    args: REWARD_CONTRACT_ADDRESS
+      ? [REWARD_CONTRACT_ADDRESS]
+      : undefined,
+    chainId: monadTestnet.id,
+    query: {
+      enabled: Boolean(REWARD_CONTRACT_ADDRESS) && verified && milestone,
+      staleTime: 8_000,
+    },
+  });
+
   const attestBusy = attestPending || attestConfirming;
   const publishBusy = publishPending || publishConfirming;
   const claimBusy = claimPending || claimConfirming;
@@ -320,9 +382,15 @@ export function VerifyClaim({
       setWarning("MOVR claim cancelled — your run is still on the feed.");
       return;
     }
-    if (/not claimable|empty pool/i.test(msg)) {
+    if (/not claimable/i.test(msg)) {
       setWarning(
-        "Feed published. MOVR claim skipped (already claimed or pool empty).",
+        "Feed published. MOVR claim skipped — run isn’t claimable yet (under 1 km, already claimed, or still indexing).",
+      );
+      return;
+    }
+    if (/empty pool/i.test(msg)) {
+      setWarning(
+        "Feed published. Milestone reward pool is empty — ask the operator to fund it, then claim later from your run.",
       );
       return;
     }
@@ -398,6 +466,26 @@ export function VerifyClaim({
       if (published && !REWARD_CONTRACT_ADDRESS) setLocalClaimed(true);
       return;
     }
+    // Wait for claimable / pool reads before burning a failing claim tx
+    if (isClaimableOnChain === undefined || milestonePoolBal === undefined) {
+      return;
+    }
+    if (!isClaimableOnChain) {
+      autoClaimTried.current = true;
+      setWarning(
+        "Feed published. MOVR claim skipped — not claimable on-chain yet.",
+      );
+      return;
+    }
+    const need =
+      (previewRunner ?? 0n) + (previewClub ?? 0n);
+    if (need > 0n && milestonePoolBal < need) {
+      autoClaimTried.current = true;
+      setWarning(
+        "Feed published. Milestone pool has no MOVR right now — run is on the feed; claim when the pool is funded.",
+      );
+      return;
+    }
     autoClaimTried.current = true;
     void (async () => {
       let gas = CLAIM_GAS_FLOOR;
@@ -433,6 +521,10 @@ export function VerifyClaim({
     runHash,
     writeClaim,
     publicClient,
+    isClaimableOnChain,
+    milestonePoolBal,
+    previewRunner,
+    previewClub,
   ]);
 
   // Finish pipeline → persist local cache; stay on this screen until user continues
@@ -441,7 +533,8 @@ export function VerifyClaim({
     if (!published) return;
     // Wait for claim attempt to settle when milestone applies — but never treat a
     // mid-flight claim error as a reason to abandon the screen.
-    const rewardDone = !milestone || movrClaimed || claimFailed;
+    const rewardDone =
+      !milestone || movrClaimed || claimFailed || (autoClaimTried.current && !claimBusy);
     if (!rewardDone) return;
     finishTried.current = true;
     const tx = publishTxHash ?? claimTxHash ?? attestTxHash;
@@ -456,6 +549,7 @@ export function VerifyClaim({
     milestone,
     movrClaimed,
     claimFailed,
+    claimBusy,
     finished,
     onVerified,
     publishTxHash,
