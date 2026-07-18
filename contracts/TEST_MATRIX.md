@@ -1,8 +1,9 @@
 # MovrChain Security Audit Reconciliation
 
-**Status: all High / Medium / Low findings from original + Jul 18 reaudits #1–#2 are FIXED** (Info residuals documented).  
-Reaudit #3 (Staking Expected rewards UI): frontend **17/20 Good**; Low/Info UX residuals **OPEN** (non-blocking).  
-Foundry: `forge test --offline` → **92 passed** (Jul 18 2026 — execute manager gate).
+**Status: all High / Medium findings from original + Jul 18 reaudits #1–#2 are FIXED.**  
+Reaudit #3 (Staking UI): caption + responsive **FIXED**; optional Vitest for `projectStakingRewards` still OPEN.  
+Reaudit #4 (contracts, Jul 18 2026): Low treasury/staking findings **FIXED** (C16–C17, S11–S12). Info residuals documented.  
+Foundry: `forge test` → **97 passed** (Jul 18 2026 — reaudit #4 fixes).
 
 ---
 
@@ -89,6 +90,26 @@ Feature shipped:
 
 ---
 
+## Jul 18 2026 reaudit #4 (contracts — staking / treasury / multisig / upgrades)
+
+**Verdict: Ship.** Static review + fixes + `forge test` → **97 passed, 0 failed**.  
+Prior High/Medium remain FIXED. Reaudit #4 Lows (C16–C17, donate snapshot) **FIXED**.
+
+| Sev | Contract | Issue | Status | Fix / note |
+|-----|----------|--------|--------|------------|
+| **Low** | ClubTreasury | Passed proposal: proposer `leaveClub` → `execute` reverts (`creditProposalPassed` needs live membership); funds stay reserved until proposer `cancel` | **FIXED** | `creditProposalPassed(proposer, clubId)` — no live membership; C16 |
+| **Low** | ClubTreasury | Proposer may `cancel` after vote passed / `votingClosed` (grief reservation) | **FIXED** | `cancel` reverts `"passed"` when closed + yes majority; C17 |
+| **Low** | MovrStaking | Yield donate uses **claim-time** `clubOf` (not snapshot); leave → rejoin other club redirects donate | **FIXED** | `donateClubId` snapshot at `setDonateBps`; claim only if still member; S11–S12 |
+| **Info** | MovrStaking | `donateBps` persists after leave; claim while clubless keeps 100% | **OK** (intentional) | Prefs persist; claim skips donate until re-`setDonateBps` in a club (S11) |
+| **Info** | Multisig / upgrade | `MULTISIG_THRESHOLD=1` auto-schedules Timelock ops (delay still applies) | **OK** (hackathon) | Production: threshold ≥2 |
+| **Info** | MilestoneReward | `withdrawExcess` can drain claim pool | **OK** (Timelock kill-switch) | Documented in reaudit #2 |
+| **Info** | MovrMultisig | No revoke confirmation | **OPEN** (ops) | Optional future revoke |
+| **Info** | Attestation | Deployer may retain `ATTESTER_ROLE` until Timelock ops | **OK** (intentional) | Prod checklist |
+
+**Solid (reconfirmed):** `lockedRate` non-retroactive; `rewardReserve` claim cap; staking `withdrawExcess` locks principal+reserve; manager-only treasury execute + reservations; Multisig threshold + failed-exec rollback; PrivilegeHandoff; challenge manager/≤90d/leaver forfeit; attestation `clubIdAtAttest`.
+
+---
+
 ## Test matrix
 
 ### MovrToken
@@ -133,6 +154,8 @@ Feature shipped:
 | S8 | Frontend day/month/year projection matches live rate × boost | ✅ (UI) |
 | S9 | Frontend club yield split uses donate bps (You keep / Club / Gross) | ✅ (UI) |
 | S10 | Frontend what-if uses amount field when stake is zero | ✅ (UI) |
+| S11 | Leave club then claim with `donateBps` set → full payout, no treasury transfer | ➕ |
+| S12 | Snapshot club at `setDonateBps`; join other club without re-save → no redirect; re-save → new club | ➕ |
 
 ### AchievementNFT
 | ID | Case | Status |
@@ -145,6 +168,8 @@ Feature shipped:
 | ID | Case | Status |
 |----|------|--------|
 | C1–C15 | Create / vote / leave-burn / reservation / badges soulbound | ✅/➕ |
+| C16 | Passed proposal: proposer leaves → manager `execute` still pays + credits | ➕ |
+| C17 | Passed + voting closed: proposer `cancel` reverts `"passed"` | ➕ |
 
 ### Challenges
 | ID | Case | Status |
@@ -165,6 +190,7 @@ Feature shipped:
 | U8 | Non-owner cannot upgrade beacon | ➕ |
 | U9 | Privilege handoff: deployer drained; Timelock admin; ATTESTER + registry MINTER kept | ➕ |
 | U10 | Drained deployer cannot `grantRole` / `createAchievement` | ➕ |
+| U11 | `MULTISIG_THRESHOLD=2`: schedule needs second confirmation before Timelock op | ⬜ (prod path) |
 
 ### Frontend / gas (manual + observed)
 | ID | Case | Status |

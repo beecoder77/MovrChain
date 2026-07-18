@@ -44,12 +44,14 @@ contract MovrStaking is AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeab
     uint256 public rewardReserve;
 
     mapping(address => uint16) public donateBps;
+    /// @notice Club id snapshotted when donate % was enabled — claim routes here only while still a member.
+    mapping(address => uint256) public donateClubId;
 
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
     event Claimed(address indexed user, uint256 kept, uint256 donated, address treasury);
     event RatesUpdated(uint256 rewardPerTokenPerSecond, uint256 maxBoostBps, uint256 baseAchievementBoostBps);
-    event DonatePrefsUpdated(address indexed user, uint16 bps);
+    event DonatePrefsUpdated(address indexed user, uint16 bps, uint256 clubId);
     event ClubRegistrySet(address indexed registry);
     event ClubBadgesSet(address indexed badges);
     event RewardsFunded(uint256 amount, uint256 rewardReserve);
@@ -122,12 +124,15 @@ contract MovrStaking is AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeab
 
     function setDonateBps(uint16 bps) external {
         require(bps == 0 || (bps >= MIN_DONATE_BPS && bps <= MAX_DONATE_BPS), "bps");
+        uint256 clubId;
         if (bps > 0) {
             require(address(clubRegistry) != address(0), "registry");
-            require(clubRegistry.clubOf(msg.sender) != 0, "no club");
+            clubId = clubRegistry.clubOf(msg.sender);
+            require(clubId != 0, "no club");
         }
         donateBps[msg.sender] = bps;
-        emit DonatePrefsUpdated(msg.sender, bps);
+        donateClubId[msg.sender] = clubId;
+        emit DonatePrefsUpdated(msg.sender, bps, clubId);
     }
 
     function boostBpsOf(address account) public view returns (uint256 boost) {
@@ -202,9 +207,10 @@ contract MovrStaking is AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeab
         uint256 donated;
         address treasury;
         if (bps > 0 && address(clubRegistry) != address(0)) {
-            uint256 clubId = clubRegistry.clubOf(msg.sender);
-            if (clubId != 0) {
-                (,, treasury,,,,) = clubRegistry.getClub(clubId);
+            uint256 preferred = donateClubId[msg.sender];
+            // Snapshot club from setDonateBps; only donate while still a member of that club.
+            if (preferred != 0 && clubRegistry.isMember(preferred, msg.sender)) {
+                (,, treasury,,,,) = clubRegistry.getClub(preferred);
                 donated = (payableReward * uint256(bps)) / 10_000;
                 if (donated > 0 && treasury != address(0)) {
                     movr.safeTransfer(treasury, donated);
@@ -226,5 +232,5 @@ contract MovrStaking is AccessControlUpgradeable, ReentrancyGuard, UUPSUpgradeab
     function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /// @dev Storage gap for future upgrades (append-only layout).
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 }

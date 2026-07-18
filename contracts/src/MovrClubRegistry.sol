@@ -297,9 +297,10 @@ contract MovrClubRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable 
         votesCastCount[voter] += 1;
     }
 
-    function creditProposalPassed(address proposer) external {
-        uint256 id = clubOf[proposer];
-        require(id != 0 && _clubs[id].treasury == msg.sender, "treasury");
+    /// @notice Called by ClubTreasury after a passed proposal executes.
+    /// @dev `forClubId` is the treasury's club — proposer may have left already.
+    function creditProposalPassed(address proposer, uint256 forClubId) external {
+        require(forClubId != 0 && _clubs[forClubId].treasury == msg.sender, "treasury");
         proposalsPassedCount[proposer] += 1;
     }
 

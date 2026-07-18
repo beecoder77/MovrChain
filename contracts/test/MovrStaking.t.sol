@@ -163,4 +163,78 @@ contract MovrStakingTest is Test {
         emptyStaking.claim();
         vm.stopPrank();
     }
+
+    /// S11 — leave preferred club → claim skips donate (full payout).
+    function testClaimSkipsDonateAfterLeaveClub() public {
+        vm.prank(runner);
+        (uint256 clubId, address treasury) = registry.createClub("Solo", true);
+
+        vm.startPrank(runner);
+        staking.setDonateBps(500);
+        assertEq(staking.donateClubId(runner), clubId);
+        movr.approve(address(staking), 100 ether);
+        staking.stake(100 ether);
+        vm.warp(block.timestamp + 1 days);
+        uint256 pending = staking.pendingReward(runner);
+        assertGt(pending, 0);
+
+        registry.leaveClub(clubId);
+        assertEq(registry.clubOf(runner), 0);
+        assertEq(staking.donateBps(runner), 500); // prefs persist
+
+        uint256 treasuryBefore = movr.balanceOf(treasury);
+        uint256 walletBefore = movr.balanceOf(runner);
+        staking.claim();
+        assertEq(movr.balanceOf(treasury), treasuryBefore);
+        assertEq(movr.balanceOf(runner), walletBefore + pending);
+        vm.stopPrank();
+    }
+
+    /// S12 — snapshot club at setDonateBps; joining another club does not redirect yield.
+    function testDonateUsesSnapshotClubNotLiveClubOf() public {
+        address other = address(0xC10B);
+        vm.prank(other);
+        (uint256 clubB, address treasuryB) = registry.createClub("Club B", true);
+
+        vm.prank(runner);
+        (uint256 clubA, address treasuryA) = registry.createClub("Club A", true);
+
+        vm.startPrank(runner);
+        staking.setDonateBps(500);
+        assertEq(staking.donateClubId(runner), clubA);
+        movr.approve(address(staking), 100 ether);
+        staking.stake(100 ether);
+        vm.warp(block.timestamp + 12 hours);
+
+        registry.leaveClub(clubA);
+        vm.stopPrank();
+
+        // Other captain adds runner to club B
+        vm.prank(other);
+        registry.addMember(clubB, runner);
+        assertEq(registry.clubOf(runner), clubB);
+
+        vm.startPrank(runner);
+        uint256 pending = staking.pendingReward(runner);
+        assertGt(pending, 0);
+        uint256 balA = movr.balanceOf(treasuryA);
+        uint256 balB = movr.balanceOf(treasuryB);
+        uint256 walletBefore = movr.balanceOf(runner);
+        staking.claim();
+        // Still snapshotted to A but not a member → no donate; B does not receive
+        assertEq(movr.balanceOf(treasuryA), balA);
+        assertEq(movr.balanceOf(treasuryB), balB);
+        assertEq(movr.balanceOf(runner), walletBefore + pending);
+
+        // Re-save donate while in B → snapshot updates to B
+        staking.setDonateBps(500);
+        assertEq(staking.donateClubId(runner), clubB);
+        vm.warp(block.timestamp + 12 hours);
+        pending = staking.pendingReward(runner);
+        uint256 expectedDonate = (pending * 500) / 10_000;
+        balB = movr.balanceOf(treasuryB);
+        staking.claim();
+        assertEq(movr.balanceOf(treasuryB), balB + expectedDonate);
+        vm.stopPrank();
+    }
 }

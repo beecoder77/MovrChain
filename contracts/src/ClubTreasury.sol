@@ -14,7 +14,7 @@ interface IClubRegistryView {
     function members(uint256 clubId) external view returns (address[] memory);
     function creditDonationStats(address donor, uint256 amount) external;
     function creditVote(address voter) external;
-    function creditProposalPassed(address proposer) external;
+    function creditProposalPassed(address proposer, uint256 forClubId) external;
 }
 
 /// @title ClubTreasury — pooled MOVR + proposals for group spends
@@ -261,17 +261,23 @@ contract ClubTreasury is Initializable, ReentrancyGuard {
         p.state = ProposalState.Executed;
         totalReserved -= p.amount;
         proposalsPassed[p.proposer] += 1;
-        registry.creditProposalPassed(p.proposer);
+        // Credit against this treasury's club — works even if proposer already left.
+        registry.creditProposalPassed(p.proposer, clubId);
         // Send to proposer as club spend contact (hackathon MVP — refreshments/jersey lead)
         movr.safeTransfer(p.proposer, p.amount);
         emit Executed(proposalId, p.amount);
     }
 
+    /// @notice Proposer may cancel while voting is open, or after a failed vote.
+    ///         Cannot cancel a passed proposal (managers settle via execute).
     function cancel(uint256 proposalId) external {
         require(proposalId < _proposals.length, "id");
         Proposal storage p = _proposals[proposalId];
         require(p.state == ProposalState.Active, "state");
         require(msg.sender == p.proposer, "proposer");
+        if (votingClosed(proposalId) && p.yesWeight > p.noWeight) {
+            revert("passed");
+        }
         p.state = ProposalState.Cancelled;
         totalReserved -= p.amount;
         emit Cancelled(proposalId);

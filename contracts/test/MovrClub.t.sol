@@ -312,4 +312,66 @@ contract MovrClubTest is Test {
         registry.rejectJoin(clubId, alice);
         assertFalse(registry.joinPending(clubId, alice));
     }
+
+    /// C16 — proposer may leave after pass; manager can still execute.
+    function testExecuteAfterProposerLeaves() public {
+        vm.prank(creator);
+        (uint256 clubId, address treasury) = registry.createClub("LeaveExec", true);
+        vm.prank(creator);
+        registry.addMember(clubId, alice);
+
+        movr.mint(alice, 20 ether);
+        ClubTreasury t = ClubTreasury(treasury);
+        vm.startPrank(alice);
+        movr.approve(treasury, 20 ether);
+        t.donate(20 ether);
+        uint256 pid = t.propose("Kit", "jerseys", 4 ether);
+        t.vote(pid, true);
+        vm.stopPrank();
+
+        vm.prank(creator);
+        t.vote(pid, true);
+        assertTrue(t.canExecute(pid));
+
+        vm.prank(alice);
+        registry.leaveClub(clubId);
+        assertEq(registry.clubOf(alice), 0);
+
+        uint256 before = movr.balanceOf(alice);
+        uint256 reservedBefore = t.totalReserved();
+        vm.prank(creator);
+        t.execute(pid);
+        assertEq(movr.balanceOf(alice), before + 4 ether);
+        assertEq(t.totalReserved(), reservedBefore - 4 ether);
+        assertEq(registry.proposalsPassedCount(alice), 1);
+    }
+
+    /// C17 — proposer cannot cancel after a passed vote closes.
+    function testCannotCancelPassedProposal() public {
+        vm.prank(creator);
+        (uint256 clubId, address treasury) = registry.createClub("NoGrief", true);
+        vm.prank(creator);
+        registry.addMember(clubId, alice);
+
+        movr.mint(alice, 20 ether);
+        ClubTreasury t = ClubTreasury(treasury);
+        vm.startPrank(alice);
+        movr.approve(treasury, 20 ether);
+        t.donate(20 ether);
+        uint256 pid = t.propose("Snacks", "post-run", 2 ether);
+        t.vote(pid, true);
+        vm.stopPrank();
+
+        vm.prank(creator);
+        t.vote(pid, true);
+        assertTrue(t.canExecute(pid));
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("passed"));
+        t.cancel(pid);
+
+        // Still executable by manager
+        vm.prank(creator);
+        t.execute(pid);
+    }
 }

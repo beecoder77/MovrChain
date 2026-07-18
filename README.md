@@ -117,7 +117,7 @@ The **"Verify & publish"** pipeline validates the run in layers:
 - **Expected rewards UI**: The Staking tab projects day / month / year yield from today’s rate × NFT boost, splits **You keep** vs **To club** using the donate %, and previews the amount field only when nothing is staked yet. While staked, the amount field is for stake/unstake only — the table stays on current stake. Estimates (30-day month) are not a guarantee of claimable `rewardReserve`.
 - **Rate changes**: Each account accrues using a locked rate for the current interval. `configureRates` applies to future intervals, not retroactively.
 - **Solvency**: Rewards are paid only from `rewardReserve`; user principal remains tracked separately in `totalStaked`. Partial claims preserve unpaid reward debt.
-- **Club donation**: Stakers may route `2–5%` of claimed yield to their current club treasury.
+- **Club donation**: Stakers may route `2–5%` of claimed yield to the club snapshotted when they saved donate % (`donateClubId`). Claim donates only while they remain a member of that club; leaving skips donate until they save again. Joining another club does not redirect yield without re-saving.
 
 ### 6. Running Clubs
 
@@ -125,7 +125,7 @@ Discover and join clubs on the **Clubs** tab. Clubs are ranked by active treasur
 
 - **One club per wallet**: enforced by `clubOf`; leaving clears membership and burns the soulbound member NFT so rejoining works.
 - **Manager Approval**: Private clubs require approval from the club manager to join.
-- **Treasury proposals**: proposal amounts are reserved at creation, preventing multiple active proposals from oversubscribing the same balance. Votes are rejected after voting closes.
+- **Treasury proposals**: amounts are reserved at creation, preventing multiple active proposals from oversubscribing the same balance. Votes are rejected after voting closes. Only Captain/Admin can `execute` a passed proposal. Execute still works if the proposer left; proposers cannot cancel after a passed vote closes.
 - **Challenges**: only club managers can escrow treasury rewards. Durations are capped at `90 days` / `3 months`; managers can cancel and refund. Dust and zero-winner settlement return funds to the treasury, and approvals can be revoked before settlement.
 
 ---
@@ -218,18 +218,19 @@ cd contracts
 forge test --offline
 ```
 
-Current hardening baseline: **92 tests, 0 failures** across token, attestation, feed, profile, achievements, staking, rewards, clubs, treasury, membership, badges, challenges, UUPS / Beacon / Multisig / Timelock upgrades, and privilege handoff.
+Current hardening baseline: **97 tests, 0 failures** across token, attestation, feed, profile, achievements, staking, rewards, clubs, treasury, membership, badges, challenges, UUPS / Beacon / Multisig / Timelock upgrades, and privilege handoff.
 
 Required pre-deploy checklist:
 
-- [x] `forge test --offline` passes with no compiler warnings.
-- [x] Every High / Medium / Low finding in `contracts/TEST_MATRIX.md` is `FIXED` (including Jul 18 2026 reaudits #1–#3).
+- [x] `forge test` passes with no compiler warnings.
+- [x] Every High / Medium / Low finding in `contracts/TEST_MATRIX.md` is `FIXED` (Jul 18 2026 reaudits #1–#4).
 - [x] Constructor and one-time wiring order matches the deployment flow below (`DeployUpgradeableStack`).
 - [x] Frontend ABI/address constants and both env files match the UUPS cutover deployment.
 - [ ] Reward pools are funded without exceeding `MovrToken.MAX_SUPPLY()`.
 - [ ] Representative reads confirm bytecode and expected configuration.
 - [ ] All new implementations are source-verified on MonadScan (proxies may remain bytecode-only; implementations verified).
 - [ ] Production trust policy is explicit: self-attest on, or trusted attester configured.
+- [ ] Production Multisig: set `MULTISIG_THRESHOLD≥2` (hackathon uses threshold=1).
 
 > A green local suite validates the current source. It does **not** prove the addresses below run that bytecode.
 
