@@ -396,6 +396,35 @@ button {
   margin-bottom: var(--space-4);
 }
 
+.connect-screen__alert a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.connect-screen__alert code {
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.connect-screen__actions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.connect-screen__action {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.connect-screen__action-hint {
+  margin: 0;
+  padding: 0 var(--space-1);
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  text-wrap: pretty;
+}
+
 /* Feed */
 .feed-screen {
   flex: 1;

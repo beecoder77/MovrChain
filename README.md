@@ -40,7 +40,7 @@ For judges or quick manual verification, open the [production app](https://movr.
   - Open [http://localhost:5173](http://localhost:5173).
   - Click the **"Import"** button.
   - Select **"Load Sample Run"** to load `public/sample-run.gpx` and test the full visual route replay and summary flow without needing a wallet.
-  - To test the on-chain attestation and claims, connect a MetaMask/evm wallet configured to the **Monad Testnet**.
+  - To test the on-chain attestation and claims, connect a wallet on **Monad Testnet**. Desktop: browser extension (e.g. MetaMask). Phone: use **Wallet app** (WalletConnect) — set `VITE_WALLETCONNECT_PROJECT_ID` from [cloud.reown.com](https://cloud.reown.com).
 
 ---
 

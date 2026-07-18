@@ -1,20 +1,101 @@
-import { useState } from "react";
-import { useAccount, useConnect, useSwitchChain } from "wagmi";
+import { useMemo, useState } from "react";
+import {
+  useAccount,
+  useConnect,
+  useSwitchChain,
+  type Connector,
+} from "wagmi";
 import { monadTestnet } from "viem/chains";
 import { Button, Alert } from "../design-system/components";
 import { formatWalletError } from "../lib/errors";
+import { walletConnectEnabled } from "../lib/wagmi";
+
+function isMobileUa(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function hasInjectedProvider(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean((window as Window & { ethereum?: unknown }).ethereum)
+  );
+}
+
+function connectorKind(connector: Connector): "walletConnect" | "injected" | "other" {
+  const id = connector.id.toLowerCase();
+  const name = connector.name.toLowerCase();
+  if (id.includes("walletconnect") || name.includes("walletconnect")) {
+    return "walletConnect";
+  }
+  if (id === "injected" || name.includes("injected")) return "injected";
+  return "other";
+}
+
+function connectorLabel(connector: Connector): string {
+  switch (connectorKind(connector)) {
+    case "walletConnect":
+      return "Wallet app (MetaMask, Trust, …)";
+    case "injected":
+      return hasInjectedProvider()
+        ? `Browser wallet${connector.name && connector.name !== "Injected" ? ` (${connector.name})` : ""}`
+        : "Browser wallet extension";
+    default:
+      return connector.name || "Wallet";
+  }
+}
+
+function connectorHint(connector: Connector): string | null {
+  switch (connectorKind(connector)) {
+    case "walletConnect":
+      return "Opens your mobile wallet app, or a QR code on desktop.";
+    case "injected":
+      return hasInjectedProvider()
+        ? null
+        : "Needs MetaMask (or similar) installed in this browser — or use a wallet app below.";
+    default:
+      return null;
+  }
+}
 
 export function ConnectScreen() {
   const { connect, connectors, isPending } = useConnect();
   const { switchChainAsync } = useSwitchChain();
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const handleConnect = () => {
+  const mobile = useMemo(() => isMobileUa(), []);
+  const injectedReady = useMemo(() => hasInjectedProvider(), []);
+
+  const orderedConnectors = useMemo(() => {
+    const list = [...connectors];
+    list.sort((a, b) => {
+      const rank = (c: Connector) => {
+        const kind = connectorKind(c);
+        if (mobile && !injectedReady) {
+          if (kind === "walletConnect") return 0;
+          if (kind === "injected") return 2;
+          return 1;
+        }
+        if (kind === "injected" && injectedReady) return 0;
+        if (kind === "walletConnect") return 1;
+        return 2;
+      };
+      return rank(a) - rank(b);
+    });
+    return list;
+  }, [connectors, mobile, injectedReady]);
+
+  const handleConnect = (connector: Connector) => {
     setConnectError(null);
-    const connector = connectors[0];
-    if (!connector) {
+    setPendingId(connector.id);
+
+    if (connectorKind(connector) === "injected" && !hasInjectedProvider()) {
+      setPendingId(null);
       setConnectError(
-        "No wallet found. Install MetaMask or another Web3 wallet, then reload.",
+        mobile
+          ? "This browser has no wallet extension. Use “Wallet app” to open MetaMask or another mobile wallet."
+          : "No wallet extension detected. Install MetaMask (or similar), or use WalletConnect with a mobile wallet.",
       );
       return;
     }
@@ -23,12 +104,17 @@ export function ConnectScreen() {
       { connector, chainId: monadTestnet.id },
       {
         onError: (err) => {
+          setPendingId(null);
           setConnectError(formatWalletError(err) ?? "Could not connect wallet.");
         },
         onSuccess: () => {
+          setPendingId(null);
           void switchChainAsync({ chainId: monadTestnet.id }).catch(() => {
             /* already on Monad or user rejected — NetworkGate handles it */
           });
+        },
+        onSettled: () => {
+          setPendingId(null);
         },
       },
     );
@@ -60,16 +146,49 @@ export function ConnectScreen() {
           <Alert className="connect-screen__alert">{connectError}</Alert>
         )}
 
-        <Button
-          block
-          loading={isPending}
-          disabled={isPending}
-          onClick={handleConnect}
-        >
-          {isPending ? "Connecting…" : "Connect wallet to start"}
-        </Button>
+        {!walletConnectEnabled && mobile && !injectedReady && (
+          <Alert className="connect-screen__alert">
+            Mobile wallet connect needs a WalletConnect Project ID (
+            <code>VITE_WALLETCONNECT_PROJECT_ID</code>). Free at{" "}
+            <a
+              href="https://cloud.reown.com"
+              target="_blank"
+              rel="noreferrer"
+            >
+              cloud.reown.com
+            </a>
+            .
+          </Alert>
+        )}
+
+        <div className="connect-screen__actions">
+          {orderedConnectors.map((connector, index) => {
+            const pendingThis = isPending && pendingId === connector.id;
+            const primary = index === 0;
+            const hint = connectorHint(connector);
+            return (
+              <div key={connector.id} className="connect-screen__action">
+                <Button
+                  block
+                  variant={primary ? "primary" : "secondary"}
+                  loading={pendingThis}
+                  disabled={isPending}
+                  onClick={() => handleConnect(connector)}
+                >
+                  {pendingThis ? "Connecting…" : connectorLabel(connector)}
+                </Button>
+                {hint && (
+                  <p className="connect-screen__action-hint">{hint}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
         <p className="connect-screen__footnote">
-          Fitness product first — wallet unlocks verify &amp; rewards, not speculation.
+          {mobile
+            ? "On phone, use Wallet app to open MetaMask or another wallet. Sample runs still work without connecting."
+            : "You can Import → Load Sample Run without a wallet. Connect when you’re ready to verify on Monad and claim rewards."}
         </p>
       </div>
     </div>

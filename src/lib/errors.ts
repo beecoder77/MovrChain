@@ -52,7 +52,7 @@ function mapKnownFailure(combined: string): string | null {
     return "Switch to Monad testnet in your wallet, then try again.";
   }
   if (combined.includes("connector not found") || combined.includes("no provider")) {
-    return "No wallet detected. Install MetaMask or another Web3 wallet.";
+    return "No wallet detected. On phone, use WalletConnect to open MetaMask or another wallet app. On desktop, install a browser extension.";
   }
   // Exact revert / custom errors from MovrChainAttestation.attestRun
   if (
