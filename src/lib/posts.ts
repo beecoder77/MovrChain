@@ -1,5 +1,6 @@
 import type { ParsedRun } from "./gpx";
 import { computeRunHash, meetsMilestone } from "./chain";
+import { FEED_ADDRESS } from "./contracts";
 import { formatDistance, formatDuration, formatPace } from "./gpx";
 import { saveRouteFromRun } from "./routes";
 
@@ -46,7 +47,8 @@ export type Achievement = AchievementDef & {
   unlockedAt?: string;
 };
 
-const STORAGE_KEY = "movrchain-posts-v1";
+/** Device cache for your runs — scoped to current feed so a redeploy does not resurrect stale history. */
+const STORAGE_KEY = `movrchain-posts-v2:${FEED_ADDRESS.toLowerCase()}`;
 
 /** Seeded achievements — mirrors contracts + public/brand/achievements */
 export const ACHIEVEMENTS: AchievementDef[] = [

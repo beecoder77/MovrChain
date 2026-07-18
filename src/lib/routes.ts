@@ -1,7 +1,9 @@
 import type { LatLng, ParsedRun, RunPoint } from "./gpx";
 import { downsamplePoints } from "./gpx";
+import { FEED_ADDRESS } from "./contracts";
 
-const ROUTES_KEY = "movrchain-routes-v1";
+/** Route polylines for detail maps — keyed per feed cutover like posts cache. */
+const ROUTES_KEY = `movrchain-routes-v2:${FEED_ADDRESS.toLowerCase()}`;
 /** Keep maps small enough for localStorage; matches RouteMap density */
 const STORE_MAX_POINTS = 120;
 

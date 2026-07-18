@@ -79,7 +79,7 @@ export default function App() {
     [address, feedVersion],
   );
 
-  /** On-chain Your runs, merged with local cache for pre-feed posts */
+  /** On-chain Your runs, plus this device’s cache for the current feed contract only */
   const yourPosts = useMemo(() => {
     if (chainPersonal.length === 0) return localPersonal;
     const seen = new Set(chainPersonal.map((p) => p.runHash.toLowerCase()));

@@ -96,11 +96,11 @@ export function FeedScreen({
             cta: "log" as const,
           }
         : tab === "community"
-          ? {
-              title: "Community Feed is empty",
-              body: "When runners verify on Monad, their runs show up here for everyone.",
-              cta: null,
-            }
+            ? {
+                title: "Community Feed is empty",
+                body: "This board is shared on Monad — every device sees the same list. It’s empty until someone verifies and publishes a run.",
+                cta: null,
+              }
           : !roster.inClub
             ? {
                 title: "No club yet",
